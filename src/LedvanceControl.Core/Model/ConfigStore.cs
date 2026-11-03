@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace LedvanceControl.Core.Model;
 
 /// <summary>
-/// Loads/saves <see cref="AppConfig"/> as JSON under %APPDATA%\LedvanceControl.
+/// Loads/saves <see cref="AppConfig"/> as JSON under %APPDATA%\IoTSmartControl.
 /// Secrets (cloud client secret, device local keys) are encrypted with Windows DPAPI for the current user.
 /// </summary>
 public sealed class ConfigStore
@@ -16,8 +16,22 @@ public sealed class ConfigStore
     public ConfigStore(string? path = null)
     {
         // LEDVANCE_CONFIG allows a portable / alternative configuration file
-        Path = path ?? Environment.GetEnvironmentVariable("LEDVANCE_CONFIG") ?? System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LedvanceControl", "config.json");
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        Path = path ?? Environment.GetEnvironmentVariable("LEDVANCE_CONFIG")
+            ?? System.IO.Path.Combine(appData, "IoTSmartControl", "config.json");
+
+        // Migrate a config written by the previous app name (%APPDATA%\LedvanceControl) so an
+        // existing cloud/SmartThings connection carries over. DPAPI secrets are current-user scoped
+        // and stay decryptable after the move.
+        if (path == null && !File.Exists(Path))
+        {
+            var legacy = System.IO.Path.Combine(appData, "LedvanceControl", "config.json");
+            if (File.Exists(legacy))
+            {
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
+                File.Copy(legacy, Path);
+            }
+        }
     }
 
     public string Path { get; }

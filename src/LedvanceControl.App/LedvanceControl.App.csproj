@@ -11,9 +11,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <AssemblyName>LedvanceControl</AssemblyName>
+    <AssemblyName>IoTSmartControl</AssemblyName>
     <RootNamespace>LedvanceControl.App</RootNamespace>
     <ApplicationIcon>app.ico</ApplicationIcon>
+    <Product>IoT Smart Control for Windows</Product>
+    <AssemblyTitle>IoT Smart Control for Windows</AssemblyTitle>
+    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

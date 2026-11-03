@@ -17,7 +17,7 @@ public static class ThemeManager
         if (app == null) return;
         var dict = new ResourceDictionary
         {
-            Source = new Uri($"pack://application:,,,/LedvanceControl;component/Themes/{theme}.xaml"),
+            Source = new Uri($"pack://application:,,,/IoTSmartControl;component/Themes/{theme}.xaml"),
         };
         var merged = app.Resources.MergedDictionaries;
         if (merged.Count == 0) merged.Add(dict);

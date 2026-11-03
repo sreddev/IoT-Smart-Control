@@ -26,7 +26,7 @@ public partial class MainWindow : Window
         _tray = new Forms.NotifyIcon
         {
             Icon = LoadAppIcon(),
-            Text = "LEDVANCE Smart+ WiFi Control",
+            Text = "IoT Smart Control for Windows",
             ContextMenuStrip = menu,
             Visible = true,
         };

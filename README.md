@@ -98,7 +98,8 @@ Pair new devices with the phone app once; this app then controls them.
 3. For LAN control, press **Discover devices** so the app learns each device's LAN IP and protocol version.
    From then on, control goes over the LAN whenever possible, with the cloud as fallback.
 
-Configuration is stored in `%APPDATA%\LedvanceControl\config.json`. The Tuya cloud secret, SmartThings client
+Configuration is stored in `%APPDATA%\IoTSmartControl\config.json` (a config from an earlier build under
+`%APPDATA%\LedvanceControl` is migrated automatically on first run). The Tuya cloud secret, SmartThings client
 secret and refresh token, and device local keys are encrypted with Windows DPAPI.
 Set `LEDVANCE_CONFIG` to use a different file.
 
