@@ -1,0 +1,24 @@
+<UserControl x:Class="LedvanceControl.App.Views.HelpButton"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             VerticalAlignment="Center">
+    <Button x:Name="Btn" Click="OnClick" Cursor="Hand" Padding="0" BorderThickness="0" Background="Transparent"
+            ToolTip="Open the step-by-step guide">
+        <Button.Template>
+            <ControlTemplate TargetType="Button">
+                <Border x:Name="chip" Width="18" Height="18" CornerRadius="9"
+                        Background="{DynamicResource ControlBg}" BorderBrush="{DynamicResource Border}" BorderThickness="1">
+                    <TextBlock x:Name="q" Text="?" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMuted}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter TargetName="chip" Property="Background" Value="{DynamicResource Accent}" />
+                        <Setter TargetName="chip" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                        <Setter TargetName="q" Property="Foreground" Value="#FFFFFF" />
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Button.Template>
+    </Button>
+</UserControl>

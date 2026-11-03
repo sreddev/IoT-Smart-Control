@@ -30,6 +30,13 @@ Dark (default) and Light themes — toggle in **Settings → Appearance**:
 |---|---|
 | ![Devices, light theme](docs/screenshots/light-Devices.png) | ![Settings, light theme](docs/screenshots/light-Settings.png) |
 
+## In-app help
+
+Every page title and every Settings section has a **?** indicator that opens a themed, step-by-step guide —
+so the connectivity and setup instructions below are also available inside the app.
+
+![In-app step-by-step help](docs/screenshots/dark-Help.png)
+
 ## Features
 
 ### Implemented
