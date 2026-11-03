@@ -10,72 +10,74 @@
                 <views:HelpButton Topic="Settings" Margin="8,0,0,0" VerticalAlignment="Center" />
             </StackPanel>
 
-            <!-- Appearance + Credits: one full-width card split into two columns -->
-            <Border Style="{StaticResource Card}">
+            <!-- Appearance + Credits: compact two-column card (Option A) -->
+            <Border Style="{StaticResource Card}" Padding="16,12">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <!-- Column 1: Appearance -->
-                    <StackPanel Grid.Column="0" Margin="0,0,22,0">
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <!-- Appearance -->
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,9">
                             <TextBlock Text="Appearance" Style="{StaticResource H2}" Margin="0" VerticalAlignment="Center" />
                             <views:HelpButton Topic="Settings.Appearance" Margin="8,0,0,0" VerticalAlignment="Center" />
                         </StackPanel>
-                        <TextBlock Text="Theme" FontWeight="SemiBold" />
-                        <TextBlock Style="{StaticResource Muted}" Text="Dark (default) or light. Applies immediately and is remembered." />
-                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Light" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,10,0" />
                             <CheckBox Style="{StaticResource Switch}" VerticalAlignment="Center"
                                       IsChecked="{Binding DataContext.IsDarkTheme, RelativeSource={RelativeSource AncestorType=Window}}" />
                             <TextBlock Text="Dark" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                            <TextBlock Text="· remembered" Style="{StaticResource Muted}" FontSize="12" VerticalAlignment="Center" Margin="9,0,0,0" />
                         </StackPanel>
                     </StackPanel>
 
-                    <Border Grid.Column="1" Width="1" Background="{DynamicResource Border}" Margin="0,4" />
+                    <Border Grid.Column="1" Width="1" Background="{DynamicResource Border}" Margin="0,2" />
 
-                    <!-- Column 2: Credits -->
-                    <StackPanel Grid.Column="2" Margin="22,0,0,0">
-                        <TextBlock Text="Credits" Style="{StaticResource H2}" />
-                        <TextBlock Margin="0,0,0,10">
-                            <Run Text="Made with " /><Run Text="&#x2665;" Foreground="{DynamicResource Accent}" /><Run Text=" by " /><Run Text="Sergio" FontWeight="SemiBold" />
+                    <!-- Credits -->
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="20,0,0,0">
+                        <TextBlock Margin="0,0,0,4" TextWrapping="Wrap">
+                            <Run Text="Credits" FontWeight="SemiBold" /><Run Text="    " /><Run Text="Made with " Foreground="{DynamicResource TextMuted}" /><Run Text="&#x2665;" Foreground="{DynamicResource Accent}" /><Run Text=" by " Foreground="{DynamicResource TextMuted}" /><Run Text="Sergio" FontWeight="SemiBold" /><Run Text="   ·   License " Foreground="{DynamicResource TextMuted}" /><Run Text="MIT" FontWeight="SemiBold" />
                         </TextBlock>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="90" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="GitHub" Foreground="{DynamicResource TextMuted}" Margin="0,3" />
-                            <TextBlock Grid.Row="0" Grid.Column="1" Margin="0,3">
-                                <Hyperlink NavigateUri="https://github.com/sreddev" RequestNavigate="Link_RequestNavigate"
-                                           Foreground="{DynamicResource Accent}" TextDecorations="None">@sreddev</Hyperlink>
-                            </TextBlock>
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Telegram" Foreground="{DynamicResource TextMuted}" Margin="0,3" />
-                            <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,3">
-                                <Hyperlink NavigateUri="https://t.me/sreddev" RequestNavigate="Link_RequestNavigate"
-                                           Foreground="{DynamicResource Accent}" TextDecorations="None">@sreddev</Hyperlink>
-                            </TextBlock>
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Donate" Foreground="{DynamicResource TextMuted}" Margin="0,3" />
-                            <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,3">
-                                <Hyperlink NavigateUri="https://www.paypal.com/paypalme/sreddev?locale.x=ro_RO&amp;country.x=RO" RequestNavigate="Link_RequestNavigate"
-                                           Foreground="{DynamicResource Accent}" TextDecorations="None">PayPal — Buy me a coffee</Hyperlink>
-                            </TextBlock>
-                        </Grid>
-                        <TextBlock Style="{StaticResource Muted}" Margin="0,12,0,0"
-                                   Text="LEDVANCE, Tuya and SmartThings are trademarks of their respective owners. This project is not affiliated with them." />
-                        <TextBlock Margin="0,8,0,0">
-                            <Run Text="License: " Foreground="{DynamicResource TextMuted}" /><Run Text="MIT" FontWeight="SemiBold" />
+                        <TextBlock Margin="0,0,0,5" TextWrapping="Wrap">
+                            <Hyperlink NavigateUri="https://github.com/sreddev" RequestNavigate="Link_RequestNavigate" Foreground="{DynamicResource Accent}" TextDecorations="None">GitHub @sreddev</Hyperlink><Run Text="    ·    " Foreground="{DynamicResource TextMuted}" /><Hyperlink NavigateUri="https://t.me/sreddev" RequestNavigate="Link_RequestNavigate" Foreground="{DynamicResource Accent}" TextDecorations="None">Telegram @sreddev</Hyperlink><Run Text="    ·    " Foreground="{DynamicResource TextMuted}" /><Hyperlink NavigateUri="https://www.paypal.com/paypalme/sreddev?locale.x=ro_RO&amp;country.x=RO" RequestNavigate="Link_RequestNavigate" Foreground="{DynamicResource Accent}" TextDecorations="None">Donate</Hyperlink>
                         </TextBlock>
+                        <TextBlock Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap"
+                                   Text="LEDVANCE, Tuya &amp; SmartThings are trademarks of their respective owners; this project is not affiliated with them." />
                     </StackPanel>
                 </Grid>
+            </Border>
+
+            <!-- Device list -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Devices" Style="{StaticResource H2}" Margin="0" VerticalAlignment="Center" />
+                        <views:HelpButton Topic="Settings.Devices" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
+                               Text="Edit names, rooms and connection details, then press Apply. 'LAN first' uses the local network when an IP and local key are known." />
+                    <DataGrid ItemsSource="{Binding DeviceConfigs}" SelectedItem="{Binding SelectedDevice}" AutoGenerateColumns="False"
+                              CanUserAddRows="False" HeadersVisibility="Column" MaxHeight="360" BorderBrush="{DynamicResource Border}"
+                              GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource Border}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" />
+                            <DataGridTextColumn Header="Room" Binding="{Binding Room}" Width="*" />
+                            <DataGridTextColumn Header="IP address" Binding="{Binding Ip}" Width="*" />
+                            <DataGridComboBoxColumn Header="Version" SelectedItemBinding="{Binding Version}" Width="70" x:Name="VersionColumn" />
+                            <DataGridTextColumn Header="Local key" Binding="{Binding LocalKey}" Width="*" FontFamily="Consolas" />
+                            <DataGridCheckBoxColumn Header="LAN first" Binding="{Binding PreferLocal}" Width="70" />
+                            <DataGridCheckBoxColumn Header="Cloud" Binding="{Binding InCloud}" Width="55" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="*" IsReadOnly="True" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <Button Content="Apply changes" Style="{StaticResource AccentButton}" Command="{Binding SaveDevicesCommand}" />
+                        <Button Content="Remove selected" Command="{Binding RemoveDeviceCommand}" />
+                    </StackPanel>
+                </StackPanel>
             </Border>
 
             <!-- SmartThings -->
@@ -191,36 +193,6 @@
                             <DataGridTextColumn Header="Product key" Binding="{Binding ProductKey}" Width="*" />
                         </DataGrid.Columns>
                     </DataGrid>
-                </StackPanel>
-            </Border>
-
-            <!-- Device list -->
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                        <TextBlock Text="Devices" Style="{StaticResource H2}" Margin="0" VerticalAlignment="Center" />
-                        <views:HelpButton Topic="Settings.Devices" Margin="8,0,0,0" VerticalAlignment="Center" />
-                    </StackPanel>
-                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
-                               Text="Edit names, rooms and connection details, then press Apply. 'LAN first' uses the local network when an IP and local key are known." />
-                    <DataGrid ItemsSource="{Binding DeviceConfigs}" SelectedItem="{Binding SelectedDevice}" AutoGenerateColumns="False"
-                              CanUserAddRows="False" HeadersVisibility="Column" MaxHeight="360" BorderBrush="{DynamicResource Border}"
-                              GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource Border}">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" />
-                            <DataGridTextColumn Header="Room" Binding="{Binding Room}" Width="*" />
-                            <DataGridTextColumn Header="IP address" Binding="{Binding Ip}" Width="*" />
-                            <DataGridComboBoxColumn Header="Version" SelectedItemBinding="{Binding Version}" Width="70" x:Name="VersionColumn" />
-                            <DataGridTextColumn Header="Local key" Binding="{Binding LocalKey}" Width="*" FontFamily="Consolas" />
-                            <DataGridCheckBoxColumn Header="LAN first" Binding="{Binding PreferLocal}" Width="70" />
-                            <DataGridCheckBoxColumn Header="Cloud" Binding="{Binding InCloud}" Width="55" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="*" IsReadOnly="True" />
-                        </DataGrid.Columns>
-                    </DataGrid>
-                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                        <Button Content="Apply changes" Style="{StaticResource AccentButton}" Command="{Binding SaveDevicesCommand}" />
-                        <Button Content="Remove selected" Command="{Binding RemoveDeviceCommand}" />
-                    </StackPanel>
                 </StackPanel>
             </Border>
 
