@@ -155,6 +155,7 @@ public sealed class DpViewModel : ObservableObject
             {
                 null => "–",
                 long l when Schema.Type == DpType.Value => (l / Math.Pow(10, Schema.Scale)).ToString(CultureInfo.CurrentCulture) + (Schema.Unit is { Length: > 0 } u ? " " + u : ""),
+                double d when Schema.Type == DpType.Value => (d / Math.Pow(10, Schema.Scale)).ToString("0.###", CultureInfo.CurrentCulture) + (Schema.Unit is { Length: > 0 } u ? " " + u : ""),
                 bool b => b ? "On" : "Off",
                 _ => Convert.ToString(v, CultureInfo.InvariantCulture) ?? "",
             };

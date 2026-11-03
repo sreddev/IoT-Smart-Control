@@ -28,9 +28,11 @@ public sealed class EnergyViewModel : ObservableObject
 
     private double? Scaled(string code)
     {
-        if (_device.Get(code) is not long raw) return null;
+        // Tuya reports integers (long); SmartThings reports decimals (double).
+        double? raw = _device.Get(code) switch { long l => l, double d => d, int i => i, _ => null };
+        if (raw is null) return null;
         var scale = _device.Config.Schema.FirstOrDefault(s => s.Code == code)?.Scale ?? 0;
-        return raw / Math.Pow(10, scale);
+        return raw.Value / Math.Pow(10, scale);
     }
 
     public double? PowerW => Scaled("cur_power");

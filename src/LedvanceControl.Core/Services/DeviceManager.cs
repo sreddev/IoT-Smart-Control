@@ -98,9 +98,20 @@ public sealed class DeviceManager : IAsyncDisposable
             else _devices[d.DeviceId] = new DeviceRuntime(this, cfg);
             count++;
         }
+
+        // Prune SmartThings-only devices that no longer exist at the source (e.g. removed in the
+        // SmartThings app). Tuya-synced (InCloud) and manually-added devices are left untouched.
+        var liveIds = devices.Select(d => d.DeviceId).ToHashSet();
+        var stale = Config.Devices
+            .Where(c => c.SmartThingsId != null && !c.InCloud && !liveIds.Contains(c.SmartThingsId!))
+            .Select(c => c.Id).ToList();
+        foreach (var id in stale) RemoveInternal(id);
+
         Save();
         ListChanged?.Invoke();
-        progress?.Report($"Synchronised {count} SmartThings device(s).");
+        var msg = $"Synchronised {count} SmartThings device(s)";
+        if (stale.Count > 0) msg += $", removed {stale.Count} no longer present";
+        progress?.Report(msg + ".");
     }
 
     /// <summary>Pulls devices, local keys, schemas, rooms, scenes and automations from the cloud project.</summary>
@@ -157,10 +168,17 @@ public sealed class DeviceManager : IAsyncDisposable
                 catch (TuyaCloudException) { }
             }
         }
+        // Prune Tuya-synced devices removed from the cloud project (keep SmartThings/manual devices).
+        var liveIds = devices.Select(d => d.Id).ToHashSet();
+        var stale = Config.Devices.Where(c => c.InCloud && !liveIds.Contains(c.Id)).Select(c => c.Id).ToList();
+        foreach (var id in stale) RemoveInternal(id);
+
         Save();
         ListChanged?.Invoke();
         await RefreshCloudScenesAsync(ct);
-        progress?.Report($"Synchronised {devices.Count} device(s).");
+        var msg = $"Synchronised {devices.Count} device(s)";
+        if (stale.Count > 0) msg += $", removed {stale.Count} no longer in the project";
+        progress?.Report(msg + ".");
     }
 
     public async Task RefreshCloudScenesAsync(CancellationToken ct = default)
@@ -213,11 +231,17 @@ public sealed class DeviceManager : IAsyncDisposable
 
     public void Remove(string id)
     {
+        RemoveInternal(id);
+        Save();
+        ListChanged?.Invoke();
+    }
+
+    /// <summary>Removes a device from config, groups and the runtime map without persisting/notifying.</summary>
+    private void RemoveInternal(string id)
+    {
         Config.Devices.RemoveAll(d => d.Id == id);
         foreach (var g in Config.Groups) g.DeviceIds.Remove(id);
         if (_devices.Remove(id, out var rt)) _ = rt.DisposeAsync().AsTask();
-        Save();
-        ListChanged?.Invoke();
     }
 
     public int ImportTinyTuya(string path)

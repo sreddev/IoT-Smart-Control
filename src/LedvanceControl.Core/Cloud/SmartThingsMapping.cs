@@ -23,6 +23,10 @@ public static class SmartThingsMapping
     public const string CapLevel = "switchLevel";
     public const string CapColor = "colorControl";
     public const string CapColorTemp = "colorTemperature";
+    public const string CapPower = "powerMeter";
+    public const string CapEnergy = "energyMeter";
+    public const string CapVoltage = "voltageMeasurement";
+    public const string CapCurrent = "currentMeasurement";
 
     /// <summary>Builds a DP schema (so <see cref="LightProfile"/> and the UI work) from the device's capabilities.</summary>
     public static List<DpSchema> BuildSchema(IReadOnlyList<string> capabilities)
@@ -42,6 +46,17 @@ public static class SmartThingsMapping
             schema.Add(new DpSchema { Id = "colorTemperature", Code = "temp_value_v2", Name = "Colour temperature", Type = DpType.Value, Min = 0, Max = 100, Unit = "%" });
         if (hasColor)
             schema.Add(new DpSchema { Id = "color", Code = "colour_data_v2", Name = "Colour", Type = DpType.String });
+
+        // Metering (energy-monitoring plugs). SmartThings reports these already in SI units
+        // (W, V, A, kWh), so Scale stays 0 and the energy panel reads them directly.
+        if (capabilities.Contains(CapPower))
+            schema.Add(new DpSchema { Id = "power", Code = "cur_power", Name = "Power draw", Type = DpType.Value, Mode = "ro", Max = 4000, Unit = "W" });
+        if (capabilities.Contains(CapVoltage))
+            schema.Add(new DpSchema { Id = "voltage", Code = "cur_voltage", Name = "Voltage", Type = DpType.Value, Mode = "ro", Max = 300, Unit = "V" });
+        if (capabilities.Contains(CapCurrent))
+            schema.Add(new DpSchema { Id = "current", Code = "cur_current", Name = "Current", Type = DpType.Value, Mode = "ro", Max = 20, Unit = "A" });
+        if (capabilities.Contains(CapEnergy))
+            schema.Add(new DpSchema { Id = "energy", Code = "add_ele", Name = "Energy total", Type = DpType.Value, Mode = "ro", Max = 1000000, Unit = "kWh" });
         return schema;
     }
 
@@ -70,6 +85,12 @@ public static class SmartThingsMapping
             double.TryParse(Attr(cap, attr), NumberStyles.Any, CultureInfo.InvariantCulture, out var d) ? d : 0;
 
         if (Attr(CapSwitch, "switch") is { } sw) values["switch_led"] = sw == "on";
+
+        // Metering attributes (already in W / V / A / kWh)
+        if (main[CapPower]?["power"]?["value"] != null) values["cur_power"] = Num(CapPower, "power");
+        if (main[CapVoltage]?["voltage"]?["value"] != null) values["cur_voltage"] = Num(CapVoltage, "voltage");
+        if (main[CapCurrent]?["current"]?["value"] != null) values["cur_current"] = Num(CapCurrent, "current");
+        if (main[CapEnergy]?["energy"]?["value"] != null) values["add_ele"] = Num(CapEnergy, "energy");
 
         int level = 100;
         if (main[CapLevel]?["level"]?["value"] != null)
