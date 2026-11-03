@@ -78,46 +78,6 @@
                 </Grid>
             </Border>
 
-            <!-- Cloud -->
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                        <TextBlock Text="Tuya cloud project (optional)" Style="{StaticResource H2}" Margin="0" VerticalAlignment="Center" />
-                        <views:HelpButton Topic="Settings.Tuya" Margin="8,0,0,0" VerticalAlignment="Center" />
-                    </StackPanel>
-                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6">
-                        Create a free Cloud project at iot.tuya.com, link your app account under Devices → Link App Account,
-                        and paste the project's Access ID / Access Secret here. Synchronising imports every device with its
-                        local key, data points, rooms, scenes and automations. Afterwards devices are controlled over the LAN
-                        whenever possible; the cloud is only used as fallback.
-                    </TextBlock>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="110" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Margin="0,0,10,0">
-                            <TextBlock Text="Data centre" Style="{StaticResource Label}" />
-                            <ComboBox ItemsSource="{Binding Regions}" SelectedItem="{Binding Region}" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Margin="0,0,10,0">
-                            <TextBlock Text="Access ID / Client ID" Style="{StaticResource Label}" />
-                            <TextBox Text="{Binding ClientId, UpdateSourceTrigger=PropertyChanged}" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="Access Secret / Client Secret" Style="{StaticResource Label}" />
-                            <PasswordBox x:Name="SecretBox" PasswordChanged="SecretBox_PasswordChanged" />
-                        </StackPanel>
-                    </Grid>
-                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                        <Button Content="Save" Command="{Binding SaveCloudCommand}" />
-                        <Button Content="Save &amp; synchronise devices" Style="{StaticResource AccentButton}" Command="{Binding SyncCommand}" />
-                        <TextBlock Text="{Binding SyncProgress}" Style="{StaticResource Muted}" VerticalAlignment="Center" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
             <!-- SmartThings -->
             <Border Style="{StaticResource Card}">
                 <StackPanel>
@@ -166,6 +126,46 @@
                     </DockPanel>
                     <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,0"
                                Text="(Advanced: if you registered an http://localhost redirect and SmartThings accepts it, 'Open sign-in page' will capture the code automatically.)" />
+                </StackPanel>
+            </Border>
+
+            <!-- Cloud -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Tuya cloud project (optional)" Style="{StaticResource H2}" Margin="0" VerticalAlignment="Center" />
+                        <views:HelpButton Topic="Settings.Tuya" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6">
+                        Create a free Cloud project at iot.tuya.com, link your app account under Devices → Link App Account,
+                        and paste the project's Access ID / Access Secret here. Synchronising imports every device with its
+                        local key, data points, rooms, scenes and automations. Afterwards devices are controlled over the LAN
+                        whenever possible; the cloud is only used as fallback.
+                    </TextBlock>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,10,0">
+                            <TextBlock Text="Data centre" Style="{StaticResource Label}" />
+                            <ComboBox ItemsSource="{Binding Regions}" SelectedItem="{Binding Region}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,10,0">
+                            <TextBlock Text="Access ID / Client ID" Style="{StaticResource Label}" />
+                            <TextBox Text="{Binding ClientId, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Access Secret / Client Secret" Style="{StaticResource Label}" />
+                            <PasswordBox x:Name="SecretBox" PasswordChanged="SecretBox_PasswordChanged" />
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Save" Command="{Binding SaveCloudCommand}" />
+                        <Button Content="Save &amp; synchronise devices" Style="{StaticResource AccentButton}" Command="{Binding SyncCommand}" />
+                        <TextBlock Text="{Binding SyncProgress}" Style="{StaticResource Muted}" VerticalAlignment="Center" />
+                    </StackPanel>
                 </StackPanel>
             </Border>
 
