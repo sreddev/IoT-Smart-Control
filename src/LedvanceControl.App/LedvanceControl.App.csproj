@@ -13,12 +13,17 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>LedvanceControl</AssemblyName>
     <RootNamespace>LedvanceControl.App</RootNamespace>
+    <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- WinForms is only used for the tray icon; keep its types out of the global namespace -->
     <Using Remove="System.Windows.Forms" />
     <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app-icon.png" />
   </ItemGroup>
 
 </Project>

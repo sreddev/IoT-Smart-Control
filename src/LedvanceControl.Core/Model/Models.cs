@@ -119,6 +119,8 @@ public sealed class SmartThingsSettings
 
 public sealed class AppConfig
 {
+    /// <summary>UI theme: "Dark" (default) or "Light".</summary>
+    public string Theme { get; set; } = "Dark";
     public CloudSettings Cloud { get; set; } = new();
     public SmartThingsSettings SmartThings { get; set; } = new();
     public List<DeviceConfig> Devices { get; set; } = [];

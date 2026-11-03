@@ -35,6 +35,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
 
         Manager.ListChanged += () => System.Windows.Application.Current.Dispatcher.BeginInvoke(OnListChanged);
         NavigateCommand = new RelayCommand(p => Page = (string)p!);
+        ToggleThemeCommand = new RelayCommand(() => IsDarkTheme = !IsDarkTheme);
         RefreshAllCommand = new AsyncCommand(RefreshAllAsync);
         AllOffCommand = new AsyncCommand(async () => Status.Errors("All off", await Manager.ForEachAsync(Manager.Devices.Where(d => d.PowerCode != null), d => d.SetPowerAsync(false))));
     }
@@ -50,6 +51,25 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public ICommand NavigateCommand { get; }
     public ICommand RefreshAllCommand { get; }
     public ICommand AllOffCommand { get; }
+    public ICommand ToggleThemeCommand { get; }
+
+    /// <summary>Dark (default) vs Light; persisted and applied immediately.</summary>
+    public bool IsDarkTheme
+    {
+        get => Manager.Config.Theme != ThemeManager.Light;
+        set
+        {
+            var theme = value ? ThemeManager.Dark : ThemeManager.Light;
+            if (Manager.Config.Theme == theme) return;
+            Manager.Config.Theme = theme;
+            Manager.Save();
+            ThemeManager.Apply(theme);
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ThemeLabel));
+        }
+    }
+
+    public string ThemeLabel => IsDarkTheme ? "Dark" : "Light";
 
     public bool HasNoDevices => Devices.Count == 0;
 

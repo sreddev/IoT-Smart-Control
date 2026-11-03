@@ -70,10 +70,10 @@
                                         <Run Text="{Binding Time, Mode=OneWay, Converter={StaticResource TimeConv}}" FontWeight="SemiBold" FontSize="15" />
                                         <Run Text="  " />
                                         <Run Text="{Binding Name, Mode=OneWay}" />
-                                        <Run Text="  ·  " Foreground="{StaticResource TextMuted}" />
-                                        <Run Text="{Binding Days, Mode=OneWay, Converter={StaticResource DaysConv}}" Foreground="{StaticResource TextMuted}" />
-                                        <Run Text="  ·  " Foreground="{StaticResource TextMuted}" />
-                                        <Run Text="{Binding Action, Mode=OneWay}" Foreground="{StaticResource TextMuted}" />
+                                        <Run Text="  ·  " Foreground="{DynamicResource TextMuted}" />
+                                        <Run Text="{Binding Days, Mode=OneWay, Converter={StaticResource DaysConv}}" Foreground="{DynamicResource TextMuted}" />
+                                        <Run Text="  ·  " Foreground="{DynamicResource TextMuted}" />
+                                        <Run Text="{Binding Action, Mode=OneWay}" Foreground="{DynamicResource TextMuted}" />
                                     </TextBlock>
                                 </DockPanel>
                             </DataTemplate>
@@ -84,4 +84,5 @@
         </StackPanel>
     </ScrollViewer>
 </UserControl>
+
 

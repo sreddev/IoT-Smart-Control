@@ -26,7 +26,7 @@
                     <GroupStyle>
                         <GroupStyle.HeaderTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{StaticResource TextMuted}" Margin="2,10,0,6" />
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="2,10,0,6" />
                             </DataTemplate>
                         </GroupStyle.HeaderTemplate>
                     </GroupStyle>
@@ -42,10 +42,10 @@
                             <TextBlock Text="{Binding Glyph}" FontFamily="{StaticResource Icons}" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsOn}" Value="True">
-                                                <Setter Property="Foreground" Value="{StaticResource Accent}" />
+                                                <Setter Property="Foreground" Value="{DynamicResource Accent}" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -56,10 +56,10 @@
                                 <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" FontSize="12">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
-                                            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsOnline}" Value="True">
-                                                    <Setter Property="Foreground" Value="{StaticResource Ok}" />
+                                                    <Setter Property="Foreground" Value="{DynamicResource Ok}" />
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -119,7 +119,7 @@
                                             </DockPanel>
                                         </Grid>
                                         <TextBlock Grid.Column="2" Text="{Binding Display}" MinWidth="80" TextAlignment="Right" VerticalAlignment="Center"
-                                                   Foreground="{StaticResource TextMuted}" MaxWidth="220" TextTrimming="CharacterEllipsis" />
+                                                   Foreground="{DynamicResource TextMuted}" MaxWidth="220" TextTrimming="CharacterEllipsis" />
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
@@ -130,4 +130,5 @@
         </ScrollViewer>
     </Grid>
 </UserControl>
+
 

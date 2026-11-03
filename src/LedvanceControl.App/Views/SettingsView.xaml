@@ -6,6 +6,71 @@
         <StackPanel MaxWidth="1100" HorizontalAlignment="Left">
             <TextBlock Text="Settings" Style="{StaticResource H1}" />
 
+            <!-- Appearance + Credits: one full-width card split into two columns -->
+            <Border Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Column 1: Appearance -->
+                    <StackPanel Grid.Column="0" Margin="0,0,22,0">
+                        <TextBlock Text="Appearance" Style="{StaticResource H2}" />
+                        <TextBlock Text="Theme" FontWeight="SemiBold" />
+                        <TextBlock Style="{StaticResource Muted}" Text="Dark (default) or light. Applies immediately and is remembered." />
+                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                            <TextBlock Text="Light" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <CheckBox Style="{StaticResource Switch}" VerticalAlignment="Center"
+                                      IsChecked="{Binding DataContext.IsDarkTheme, RelativeSource={RelativeSource AncestorType=Window}}" />
+                            <TextBlock Text="Dark" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Border Grid.Column="1" Width="1" Background="{DynamicResource Border}" Margin="0,4" />
+
+                    <!-- Column 2: Credits -->
+                    <StackPanel Grid.Column="2" Margin="22,0,0,0">
+                        <TextBlock Text="Credits" Style="{StaticResource H2}" />
+                        <TextBlock Margin="0,0,0,10">
+                            <Run Text="Made with " /><Run Text="&#x2665;" Foreground="{DynamicResource Accent}" /><Run Text=" by " /><Run Text="Sergio" FontWeight="SemiBold" />
+                        </TextBlock>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="90" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="GitHub" Foreground="{DynamicResource TextMuted}" Margin="0,3" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" Margin="0,3">
+                                <Hyperlink NavigateUri="https://github.com/sreddev" RequestNavigate="Link_RequestNavigate"
+                                           Foreground="{DynamicResource Accent}" TextDecorations="None">@sreddev</Hyperlink>
+                            </TextBlock>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Telegram" Foreground="{DynamicResource TextMuted}" Margin="0,3" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,3">
+                                <Hyperlink NavigateUri="https://t.me/sreddev" RequestNavigate="Link_RequestNavigate"
+                                           Foreground="{DynamicResource Accent}" TextDecorations="None">@sreddev</Hyperlink>
+                            </TextBlock>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Donate" Foreground="{DynamicResource TextMuted}" Margin="0,3" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,3">
+                                <Hyperlink NavigateUri="https://www.paypal.com/paypalme/sreddev?locale.x=ro_RO&amp;country.x=RO" RequestNavigate="Link_RequestNavigate"
+                                           Foreground="{DynamicResource Accent}" TextDecorations="None">PayPal — Buy me a coffee</Hyperlink>
+                            </TextBlock>
+                        </Grid>
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,12,0,0"
+                                   Text="LEDVANCE, Tuya and SmartThings are trademarks of their respective owners. This project is not affiliated with them." />
+                        <TextBlock Margin="0,8,0,0">
+                            <Run Text="License: " Foreground="{DynamicResource TextMuted}" /><Run Text="MIT" FontWeight="SemiBold" />
+                        </TextBlock>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
             <!-- Cloud -->
             <Border Style="{StaticResource Card}">
                 <StackPanel>
@@ -78,7 +143,7 @@
                         <Button Content="Open sign-in page" Style="{StaticResource AccentButton}" Command="{Binding OpenStSignInCommand}" />
                         <Button Content="Sync SmartThings devices" Command="{Binding SyncStCommand}" />
                         <TextBlock VerticalAlignment="Center" Margin="4,0,0,0">
-                            <Run Text="Status: " Foreground="{StaticResource TextMuted}" /><Run Text="{Binding StStatus, Mode=OneWay}" />
+                            <Run Text="Status: " Foreground="{DynamicResource TextMuted}" /><Run Text="{Binding StStatus, Mode=OneWay}" />
                         </TextBlock>
                     </StackPanel>
                     <TextBlock Text="After approving, paste the redirected URL (or just the code value) here and click 'Use code':" Style="{StaticResource Label}" />
@@ -102,7 +167,7 @@
                         <Button Content="Import tinytuya devices.json…" Command="{Binding ImportCommand}" />
                     </StackPanel>
                     <DataGrid ItemsSource="{Binding Discovered}" AutoGenerateColumns="False" IsReadOnly="True" Margin="0,10,0,0" MaxHeight="200"
-                              HeadersVisibility="Column" GridLinesVisibility="None" BorderBrush="{StaticResource Border}">
+                              HeadersVisibility="Column" GridLinesVisibility="None" BorderBrush="{DynamicResource Border}">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Device id" Binding="{Binding Id}" Width="2*" />
                             <DataGridTextColumn Header="IP" Binding="{Binding Ip}" Width="*" />
@@ -120,8 +185,8 @@
                     <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
                                Text="Edit names, rooms and connection details, then press Apply. 'LAN first' uses the local network when an IP and local key are known." />
                     <DataGrid ItemsSource="{Binding DeviceConfigs}" SelectedItem="{Binding SelectedDevice}" AutoGenerateColumns="False"
-                              CanUserAddRows="False" HeadersVisibility="Column" MaxHeight="360" BorderBrush="{StaticResource Border}"
-                              GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Border}">
+                              CanUserAddRows="False" HeadersVisibility="Column" MaxHeight="360" BorderBrush="{DynamicResource Border}"
+                              GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource Border}">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" />
                             <DataGridTextColumn Header="Room" Binding="{Binding Room}" Width="*" />
@@ -190,4 +255,5 @@
         </StackPanel>
     </ScrollViewer>
 </UserControl>
+
 

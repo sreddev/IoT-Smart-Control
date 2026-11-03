@@ -30,4 +30,14 @@ public partial class SettingsView : UserControl
     {
         if (DataContext is SettingsViewModel vm) vm.StClientSecret = StSecretBox.Password;
     }
+
+    private void Link_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+        }
+        catch { /* no browser available */ }
+        e.Handled = true;
+    }
 }

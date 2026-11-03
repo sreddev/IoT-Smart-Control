@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = _vm;
+        ThemeManager.Apply(_vm.Manager.Config.Theme); // default Dark; applies the saved choice
 
         // closing the window hides it to the tray so schedules keep running
         var menu = new Forms.ContextMenuStrip();
@@ -24,7 +25,7 @@ public partial class MainWindow : Window
         menu.Items.Add("Exit", null, (_, _) => { _exiting = true; Close(); });
         _tray = new Forms.NotifyIcon
         {
-            Icon = System.Drawing.SystemIcons.Application,
+            Icon = LoadAppIcon(),
             Text = "LEDVANCE Smart+ WiFi Control",
             ContextMenuStrip = menu,
             Visible = true,
@@ -32,6 +33,20 @@ public partial class MainWindow : Window
         _tray.DoubleClick += (_, _) => ShowFromTray();
 
         Loaded += async (_, _) => await _vm.RefreshAllAsync();
+    }
+
+    // The tray wants a System.Drawing.Icon; reuse the executable's own (Lumen) icon.
+    private static System.Drawing.Icon LoadAppIcon()
+    {
+        try
+        {
+            var exe = Environment.ProcessPath ?? System.Diagnostics.Process.GetCurrentProcess().MainModule!.FileName;
+            return System.Drawing.Icon.ExtractAssociatedIcon(exe) ?? System.Drawing.SystemIcons.Application;
+        }
+        catch
+        {
+            return System.Drawing.SystemIcons.Application;
+        }
     }
 
     private void ShowFromTray()

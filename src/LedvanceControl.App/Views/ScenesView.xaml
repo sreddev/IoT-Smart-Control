@@ -20,7 +20,7 @@
                                             Command="{Binding DataContext.RunLocalCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
                                     <TextBlock VerticalAlignment="Center">
                                         <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
-                                        <Run Text="{Binding Actions.Count, Mode=OneWay, StringFormat='  ({0} device(s))'}" Foreground="{StaticResource TextMuted}" />
+                                        <Run Text="{Binding Actions.Count, Mode=OneWay, StringFormat='  ({0} device(s))'}" Foreground="{DynamicResource TextMuted}" />
                                     </TextBlock>
                                 </DockPanel>
                             </DataTemplate>
@@ -91,7 +91,7 @@
                                     </Button>
                                     <TextBlock VerticalAlignment="Center">
                                         <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
-                                        <Run Text="{Binding Enabled, Mode=OneWay, StringFormat='  (enabled: {0})'}" Foreground="{StaticResource TextMuted}" />
+                                        <Run Text="{Binding Enabled, Mode=OneWay, StringFormat='  (enabled: {0})'}" Foreground="{DynamicResource TextMuted}" />
                                     </TextBlock>
                                 </DockPanel>
                             </DataTemplate>
@@ -102,3 +102,4 @@
         </StackPanel>
     </ScrollViewer>
 </UserControl>
+
