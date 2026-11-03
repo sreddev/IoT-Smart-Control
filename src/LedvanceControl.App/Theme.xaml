@@ -366,4 +366,151 @@
             </Setter.Value>
         </Setter>
     </Style>
+
+    <!-- ============ Modern slim scrollbars (shown only when content overflows) ============ -->
+    <Style x:Key="ScrollThumb" TargetType="Thumb">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                    <Border x:Name="t" CornerRadius="4" Margin="2" Background="{DynamicResource ListHover}" Opacity="0.5" />
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="t" Property="Opacity" Value="0.85" />
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="t" Property="Opacity" Value="1" />
+                            <Setter TargetName="t" Property="Background" Value="{DynamicResource Accent}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="RepeatButton" x:Key="ScrollNoButton">
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RepeatButton">
+                    <Border Background="Transparent" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="ScrollBar">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Width" Value="11" />
+        <Setter Property="MinWidth" Value="11" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ScrollBar">
+                    <Grid x:Name="root" Background="Transparent">
+                        <Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}" IsDirectionReversed="True">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Style="{StaticResource ScrollNoButton}" Command="ScrollBar.PageUpCommand" />
+                            </Track.DecreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Style="{StaticResource ScrollThumb}" MinHeight="28" MinWidth="28" />
+                            </Track.Thumb>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Style="{StaticResource ScrollNoButton}" Command="ScrollBar.PageDownCommand" />
+                            </Track.IncreaseRepeatButton>
+                        </Track>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Orientation" Value="Horizontal">
+                            <Setter Property="Width" Value="Auto" />
+                            <Setter Property="MinWidth" Value="0" />
+                            <Setter Property="Height" Value="11" />
+                            <Setter Property="MinHeight" Value="11" />
+                            <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============ Pane splitter with a grip indicator ============ -->
+    <Style x:Key="PaneSplitter" TargetType="GridSplitter">
+        <Setter Property="Width" Value="10" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="Cursor" Value="SizeWE" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="GridSplitter">
+                    <Grid Background="Transparent">
+                        <Border x:Name="line" Width="2" HorizontalAlignment="Center" CornerRadius="1" Background="{DynamicResource Border}" />
+                        <StackPanel x:Name="grip" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Ellipse Width="3" Height="3" Margin="0,2.5" Fill="{DynamicResource TextMuted}" />
+                            <Ellipse Width="3" Height="3" Margin="0,2.5" Fill="{DynamicResource TextMuted}" />
+                            <Ellipse Width="3" Height="3" Margin="0,2.5" Fill="{DynamicResource TextMuted}" />
+                        </StackPanel>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="line" Property="Background" Value="{DynamicResource Accent}" />
+                            <Setter TargetName="line" Property="Width" Value="3" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============ Immersive title-bar caption buttons ============ -->
+    <Style x:Key="CaptionButton" TargetType="Button">
+        <Setter Property="Width" Value="46" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontFamily" Value="{StaticResource Icons}" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Cursor" Value="Arrow" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="b" Background="{TemplateBinding Background}">
+                        <TextBlock x:Name="g" Text="{TemplateBinding Content}" FontFamily="{TemplateBinding FontFamily}"
+                                   FontSize="{TemplateBinding FontSize}" Foreground="{TemplateBinding Foreground}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="b" Property="Background" Value="{DynamicResource ListHover}" />
+                            <Setter TargetName="g" Property="Foreground" Value="{DynamicResource TextMain}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="CloseButton" TargetType="Button" BasedOn="{StaticResource CaptionButton}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="b" Background="{TemplateBinding Background}">
+                        <TextBlock x:Name="g" Text="{TemplateBinding Content}" FontFamily="{TemplateBinding FontFamily}"
+                                   FontSize="{TemplateBinding FontSize}" Foreground="{TemplateBinding Foreground}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="b" Property="Background" Value="#E5484D" />
+                            <Setter TargetName="g" Property="Foreground" Value="#FFFFFF" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 </ResourceDictionary>

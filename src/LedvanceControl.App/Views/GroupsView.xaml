@@ -5,11 +5,12 @@
     <!-- DataContext: GroupsViewModel -->
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="300" />
-            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="300" MinWidth="240" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" MinWidth="380" />
         </Grid.ColumnDefinitions>
 
-        <DockPanel Margin="0,0,16,0">
+        <DockPanel Margin="0,0,6,0">
             <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="Groups" Style="{StaticResource H1}" Margin="0" VerticalAlignment="Center" />
@@ -31,7 +32,9 @@
             </ListBox>
         </DockPanel>
 
-        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" DataContext="{Binding Selected}">
+        <GridSplitter Grid.Column="1" Style="{StaticResource PaneSplitter}" ResizeBehavior="PreviousAndNext" ResizeDirection="Columns" ToolTip="Drag to resize" />
+
+        <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" DataContext="{Binding Selected}">
             <StackPanel Visibility="{Binding Converter={StaticResource NullToVis}}">
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
