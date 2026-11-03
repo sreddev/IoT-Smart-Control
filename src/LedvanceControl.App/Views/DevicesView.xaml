@@ -91,6 +91,10 @@
                     <views:LightPanel DataContext="{Binding Light}" />
                 </Border>
 
+                <Border Style="{StaticResource Card}" Visibility="{Binding Energy.HasMetering, Converter={StaticResource BoolToVis}}">
+                    <views:MeterPanel DataContext="{Binding Energy}" />
+                </Border>
+
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
                         <TextBlock Text="Data points" Style="{StaticResource H2}" />

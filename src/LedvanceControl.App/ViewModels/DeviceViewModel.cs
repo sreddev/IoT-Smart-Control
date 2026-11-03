@@ -20,6 +20,7 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
     {
         Runtime = runtime;
         Light = new LightControlViewModel(this);
+        Energy = new EnergyViewModel(runtime);
         RefreshCommand = new AsyncCommand(() => Runtime.RefreshAsync());
         DiagnosticsCommand = new AsyncCommand(async () =>
         {
@@ -41,6 +42,7 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
     public bool IsLight => Runtime.Light != null;
     public bool HasPower => Runtime.PowerCode != null;
     public LightControlViewModel Light { get; }
+    public EnergyViewModel Energy { get; }
     public ObservableCollection<DpViewModel> Dps { get; } = [];
     public ICommand RefreshCommand { get; }
     public ICommand DiagnosticsCommand { get; }
@@ -99,6 +101,7 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
         IsOn = Runtime.IsOn == true;
         _suppress = false;
         Light.Load(Runtime);
+        Energy.Load();
         foreach (var dp in Dps) dp.Load();
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(IsOnline));
