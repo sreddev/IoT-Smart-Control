@@ -5,9 +5,9 @@
     <!-- DataContext: ScenesViewModel -->
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel MaxWidth="980" HorizontalAlignment="Left">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="Scenes" Style="{StaticResource H1}" />
-                <views:HelpButton Topic="Scenes" Margin="10,2,0,0" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                <TextBlock Text="Scenes" Style="{StaticResource H1}" Margin="0" VerticalAlignment="Center" />
+                <views:HelpButton Topic="Scenes" Margin="8,0,0,0" VerticalAlignment="Center" />
             </StackPanel>
 
             <Border Style="{StaticResource Card}">

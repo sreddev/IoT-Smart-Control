@@ -5,9 +5,9 @@
     <!-- DataContext: SchedulesViewModel -->
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel MaxWidth="980" HorizontalAlignment="Left">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="Schedules" Style="{StaticResource H1}" />
-                <views:HelpButton Topic="Schedules" Margin="10,2,0,0" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                <TextBlock Text="Schedules" Style="{StaticResource H1}" Margin="0" VerticalAlignment="Center" />
+                <views:HelpButton Topic="Schedules" Margin="8,0,0,0" VerticalAlignment="Center" />
             </StackPanel>
             <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12"
                        Text="Timers run by this application while it is open (closing the window minimises it to the system tray so schedules keep running)." />

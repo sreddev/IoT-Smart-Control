@@ -13,7 +13,7 @@
             <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="Groups" Style="{StaticResource H1}" Margin="0" VerticalAlignment="Center" />
-                    <views:HelpButton Topic="Groups" Margin="10,2,0,0" />
+                    <views:HelpButton Topic="Groups" Margin="8,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
                 <Button Content="+ New group" Style="{StaticResource AccentButton}" Command="{Binding AddCommand}" HorizontalAlignment="Right" Margin="0" />
             </DockPanel>
