@@ -1,0 +1,7 @@
+bin/
+obj/
+*.user
+.vs/
+
+# Vendor APK (large third-party binary, kept locally only)
+*.apk

@@ -1,0 +1,109 @@
+<UserControl x:Class="LedvanceControl.App.Views.LightPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:LedvanceControl.App.ViewModels">
+    <!-- DataContext: LightControlViewModel -->
+    <StackPanel>
+        <Grid Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Border Width="64" Height="64" CornerRadius="32" Background="{Binding PreviewBrush}" BorderBrush="#22000000" BorderThickness="1">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsOn}" Value="False">
+                                <Setter Property="Opacity" Value="0.25" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+            </Border>
+            <StackPanel Grid.Column="1" Margin="16,0" VerticalAlignment="Center">
+                <TextBlock Text="Power" Style="{StaticResource Muted}" />
+                <TextBlock FontSize="18" FontWeight="SemiBold">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Text" Value="Off" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsOn}" Value="True">
+                                    <Setter Property="Text" Value="On" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
+            <CheckBox Grid.Column="2" Style="{StaticResource Switch}" IsChecked="{Binding IsOn}" VerticalAlignment="Center" />
+        </Grid>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <Button Style="{StaticResource ModeTab}" Content="White" Tag="{Binding IsWhite}" Command="{Binding SetModeCommand}" CommandParameter="white" />
+            <Button Style="{StaticResource ModeTab}" Content="Colour" Tag="{Binding IsColour}" Command="{Binding SetModeCommand}" CommandParameter="colour"
+                         Visibility="{Binding HasColour, Converter={StaticResource BoolToVis}}" />
+            <Button Style="{StaticResource ModeTab}" Content="Scenes" Tag="{Binding IsScene}" Command="{Binding SetModeCommand}" CommandParameter="scene"
+                         Visibility="{Binding HasScenes, Converter={StaticResource BoolToVis}}" />
+        </StackPanel>
+
+        <TextBlock Style="{StaticResource Label}">
+            <Run Text="Brightness" /> <Run Text="{Binding Brightness, Mode=OneWay}" /><Run Text=" %" />
+        </TextBlock>
+        <Slider Style="{StaticResource GradientSlider}" Background="{StaticResource DimGradient}" Minimum="1" Maximum="100" Value="{Binding Brightness}" />
+
+        <StackPanel Visibility="{Binding IsWhite, Converter={StaticResource BoolToVis}}">
+            <StackPanel Visibility="{Binding HasTemp, Converter={StaticResource BoolToVis}}">
+                <TextBlock Style="{StaticResource Label}" Text="Colour temperature (warm → cold)" />
+                <Slider Style="{StaticResource GradientSlider}" Background="{StaticResource TempGradient}" Minimum="0" Maximum="100" Value="{Binding Temperature}" />
+            </StackPanel>
+        </StackPanel>
+
+        <StackPanel Visibility="{Binding IsColour, Converter={StaticResource BoolToVis}}">
+            <TextBlock Style="{StaticResource Label}" Text="Hue" />
+            <Slider Style="{StaticResource GradientSlider}" Background="{StaticResource HueGradient}" Minimum="0" Maximum="360" Value="{Binding Hue}" />
+            <TextBlock Style="{StaticResource Label}" Text="Saturation" />
+            <Slider Style="{StaticResource GradientSlider}" Minimum="0" Maximum="100" Value="{Binding Saturation}">
+                <Slider.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Offset="0" Color="White" />
+                        <GradientStop Offset="1" Color="{Binding PreviewBrush.Color}" />
+                    </LinearGradientBrush>
+                </Slider.Background>
+            </Slider>
+        </StackPanel>
+
+        <StackPanel Visibility="{Binding HasColour, Converter={StaticResource BoolToVis}}">
+            <TextBlock Style="{StaticResource Label}" Text="Quick colours" />
+            <ItemsControl ItemsSource="{x:Static vm:LightControlViewModel.Swatches}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Style="{StaticResource SwatchButton}" Background="{Binding Brush}" ToolTip="{Binding Name}"
+                                Command="{Binding DataContext.ApplySwatchCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                CommandParameter="{Binding}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <StackPanel Visibility="{Binding HasScenes, Converter={StaticResource BoolToVis}}">
+            <TextBlock Style="{StaticResource Label}" Text="Light scenes" />
+            <ItemsControl ItemsSource="{x:Static vm:LightControlViewModel.SceneNames}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Style="{StaticResource ChipButton}" Content="{Binding}"
+                                Command="{Binding DataContext.ApplySceneCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                CommandParameter="{Binding}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </StackPanel>
+</UserControl>
+

@@ -1,0 +1,193 @@
+<UserControl x:Class="LedvanceControl.App.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- DataContext: SettingsViewModel -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="1100" HorizontalAlignment="Left">
+            <TextBlock Text="Settings" Style="{StaticResource H1}" />
+
+            <!-- Cloud -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Tuya cloud project (optional)" Style="{StaticResource H2}" />
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6">
+                        Create a free Cloud project at iot.tuya.com, link your app account under Devices → Link App Account,
+                        and paste the project's Access ID / Access Secret here. Synchronising imports every device with its
+                        local key, data points, rooms, scenes and automations. Afterwards devices are controlled over the LAN
+                        whenever possible; the cloud is only used as fallback.
+                    </TextBlock>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,10,0">
+                            <TextBlock Text="Data centre" Style="{StaticResource Label}" />
+                            <ComboBox ItemsSource="{Binding Regions}" SelectedItem="{Binding Region}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,10,0">
+                            <TextBlock Text="Access ID / Client ID" Style="{StaticResource Label}" />
+                            <TextBox Text="{Binding ClientId, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Access Secret / Client Secret" Style="{StaticResource Label}" />
+                            <PasswordBox x:Name="SecretBox" PasswordChanged="SecretBox_PasswordChanged" />
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Save" Command="{Binding SaveCloudCommand}" />
+                        <Button Content="Save &amp; synchronise devices" Style="{StaticResource AccentButton}" Command="{Binding SyncCommand}" />
+                        <TextBlock Text="{Binding SyncProgress}" Style="{StaticResource Muted}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- SmartThings -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="SmartThings (for cloud-locked bulbs)" Style="{StaticResource H2}" />
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6">
+                        For bulbs that only live in SmartThings. Create an OAuth app once with the SmartThings CLI
+                        (smartthings apps:create → "OAuth-In App"), scopes r:devices:* x:devices:* w:devices:* r:locations:*.
+                        SmartThings rejects http://localhost redirects, so use an HTTPS redirect that shows the returned code,
+                        e.g. https://httpbin.org/get — set that same URL both in the app and in the Redirect URI box below.
+                        Then: enter Client ID + Secret, click "Open sign-in page", approve, copy the "code" value from the page,
+                        paste it below and click "Use code", then Sync. Control runs through the SmartThings cloud (needs internet).
+                    </TextBlock>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,10,0">
+                            <TextBlock Text="Client ID" Style="{StaticResource Label}" />
+                            <TextBox Text="{Binding StClientId, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,10,0">
+                            <TextBlock Text="Client Secret" Style="{StaticResource Label}" />
+                            <PasswordBox x:Name="StSecretBox" PasswordChanged="StSecretBox_PasswordChanged" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Redirect URI (must match the OAuth app)" Style="{StaticResource Label}" />
+                            <TextBox Text="{Binding StRedirect, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Open sign-in page" Style="{StaticResource AccentButton}" Command="{Binding OpenStSignInCommand}" />
+                        <Button Content="Sync SmartThings devices" Command="{Binding SyncStCommand}" />
+                        <TextBlock VerticalAlignment="Center" Margin="4,0,0,0">
+                            <Run Text="Status: " Foreground="{StaticResource TextMuted}" /><Run Text="{Binding StStatus, Mode=OneWay}" />
+                        </TextBlock>
+                    </StackPanel>
+                    <TextBlock Text="After approving, paste the redirected URL (or just the code value) here and click 'Use code':" Style="{StaticResource Label}" />
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Content="Use code" Style="{StaticResource AccentButton}" Command="{Binding ConnectStManualCommand}" Margin="8,0,0,0" />
+                        <TextBox Text="{Binding StManualCode, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
+                    </DockPanel>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,0"
+                               Text="(Advanced: if you registered an http://localhost redirect and SmartThings accepts it, 'Open sign-in page' will capture the code automatically.)" />
+                </StackPanel>
+            </Border>
+
+            <!-- LAN -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Local network" Style="{StaticResource H2}" />
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
+                               Text="Discovery listens to the UDP broadcasts devices send (ports 6666/6667/7000) and fills in IP addresses and protocol versions of known devices. Allow the app through the Windows firewall when asked." />
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Discover devices (10 s)" Style="{StaticResource AccentButton}" Command="{Binding DiscoverCommand}" />
+                        <Button Content="Import tinytuya devices.json…" Command="{Binding ImportCommand}" />
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding Discovered}" AutoGenerateColumns="False" IsReadOnly="True" Margin="0,10,0,0" MaxHeight="200"
+                              HeadersVisibility="Column" GridLinesVisibility="None" BorderBrush="{StaticResource Border}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Device id" Binding="{Binding Id}" Width="2*" />
+                            <DataGridTextColumn Header="IP" Binding="{Binding Ip}" Width="*" />
+                            <DataGridTextColumn Header="Version" Binding="{Binding Version}" Width="80" />
+                            <DataGridTextColumn Header="Product key" Binding="{Binding ProductKey}" Width="*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </StackPanel>
+            </Border>
+
+            <!-- Device list -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Devices" Style="{StaticResource H2}" />
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
+                               Text="Edit names, rooms and connection details, then press Apply. 'LAN first' uses the local network when an IP and local key are known." />
+                    <DataGrid ItemsSource="{Binding DeviceConfigs}" SelectedItem="{Binding SelectedDevice}" AutoGenerateColumns="False"
+                              CanUserAddRows="False" HeadersVisibility="Column" MaxHeight="360" BorderBrush="{StaticResource Border}"
+                              GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Border}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" />
+                            <DataGridTextColumn Header="Room" Binding="{Binding Room}" Width="*" />
+                            <DataGridTextColumn Header="IP address" Binding="{Binding Ip}" Width="*" />
+                            <DataGridComboBoxColumn Header="Version" SelectedItemBinding="{Binding Version}" Width="70" x:Name="VersionColumn" />
+                            <DataGridTextColumn Header="Local key" Binding="{Binding LocalKey}" Width="*" FontFamily="Consolas" />
+                            <DataGridCheckBoxColumn Header="LAN first" Binding="{Binding PreferLocal}" Width="70" />
+                            <DataGridCheckBoxColumn Header="Cloud" Binding="{Binding InCloud}" Width="55" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="*" IsReadOnly="True" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <Button Content="Apply changes" Style="{StaticResource AccentButton}" Command="{Binding SaveDevicesCommand}" />
+                        <Button Content="Remove selected" Command="{Binding RemoveDeviceCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Manual add -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Add a device manually" Style="{StaticResource H2}" />
+                    <Grid DataContext="{Binding NewDevice}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="80" />
+                            <ColumnDefinition Width="80" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,8,0">
+                            <TextBlock Text="Name" Style="{StaticResource Label}" />
+                            <TextBox Text="{Binding Name}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                            <TextBlock Text="Device id" Style="{StaticResource Label}" />
+                            <TextBox Text="{Binding Id, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Margin="0,0,8,0">
+                            <TextBlock Text="Local key (16 chars)" Style="{StaticResource Label}" />
+                            <TextBox Text="{Binding LocalKey}" FontFamily="Consolas" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="3" Margin="0,0,8,0">
+                            <TextBlock Text="IP address" Style="{StaticResource Label}" />
+                            <TextBox Text="{Binding Ip}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="4" Margin="0,0,8,0">
+                            <TextBlock Text="Version" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="VersionCombo" SelectedItem="{Binding Version}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="5">
+                            <TextBlock Text="Type" Style="{StaticResource Label}" ToolTip="dj = light, cz = plug, kg = switch" />
+                            <ComboBox x:Name="CategoryCombo" SelectedItem="{Binding Category}" />
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Add device" Style="{StaticResource AccentButton}" Command="{Binding AddManualCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Style="{StaticResource Muted}" Margin="2,0,0,20">
+                <Run Text="Configuration file (secrets encrypted with Windows DPAPI): " /><Run Text="{Binding ConfigPath, Mode=OneWay}" />
+            </TextBlock>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
+

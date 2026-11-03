@@ -1,0 +1,87 @@
+<UserControl x:Class="LedvanceControl.App.Views.SchedulesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- DataContext: SchedulesViewModel -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="980" HorizontalAlignment="Left">
+            <TextBlock Text="Schedules" Style="{StaticResource H1}" />
+            <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12"
+                       Text="Timers run by this application while it is open (closing the window minimises it to the system tray so schedules keep running)." />
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="New schedule" Style="{StaticResource H2}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="110" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,10,0">
+                            <TextBlock Text="Time (HH:mm)" Style="{StaticResource Label}" />
+                            <TextBox Text="{Binding Time, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,10,0">
+                            <TextBlock Text="Target" Style="{StaticResource Label}" />
+                            <ComboBox ItemsSource="{Binding Targets}" SelectedItem="{Binding Target}" DisplayMemberPath="Display" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Margin="0,0,10,0">
+                            <TextBlock Text="Action" Style="{StaticResource Label}" />
+                            <ComboBox ItemsSource="{Binding Actions}" SelectedItem="{Binding Action}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="3">
+                            <TextBlock Text="Brightness %" Style="{StaticResource Label}" />
+                            <TextBox Text="{Binding Brightness, UpdateSourceTrigger=PropertyChanged}" ToolTip="Optional, applied when turning lights on" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Text="Days" Style="{StaticResource Label}" />
+                    <ItemsControl ItemsSource="{Binding Days}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding Selected}" Content="{Binding Name}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <DockPanel Margin="0,10,0,0">
+                        <Button DockPanel.Dock="Right" Content="Add schedule" Style="{StaticResource AccentButton}" Command="{Binding AddCommand}" Margin="8,0,0,0" />
+                        <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" ToolTip="Name (optional)" />
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Active schedules" Style="{StaticResource H2}" />
+                    <ItemsControl ItemsSource="{Binding Entries}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,5">
+                                    <CheckBox DockPanel.Dock="Left" Style="{StaticResource Switch}" IsChecked="{Binding Enabled}" Margin="0,0,14,0"
+                                              Command="{Binding DataContext.SaveCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                    <Button DockPanel.Dock="Right" Content="Delete" Margin="0"
+                                            Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                                    <Button DockPanel.Dock="Right" Content="Run now"
+                                            Command="{Binding DataContext.RunNowCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                                    <TextBlock VerticalAlignment="Center">
+                                        <Run Text="{Binding Time, Mode=OneWay, Converter={StaticResource TimeConv}}" FontWeight="SemiBold" FontSize="15" />
+                                        <Run Text="  " />
+                                        <Run Text="{Binding Name, Mode=OneWay}" />
+                                        <Run Text="  ·  " Foreground="{StaticResource TextMuted}" />
+                                        <Run Text="{Binding Days, Mode=OneWay, Converter={StaticResource DaysConv}}" Foreground="{StaticResource TextMuted}" />
+                                        <Run Text="  ·  " Foreground="{StaticResource TextMuted}" />
+                                        <Run Text="{Binding Action, Mode=OneWay}" Foreground="{StaticResource TextMuted}" />
+                                    </TextBlock>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
+

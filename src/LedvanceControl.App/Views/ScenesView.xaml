@@ -1,0 +1,104 @@
+<UserControl x:Class="LedvanceControl.App.Views.ScenesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- DataContext: ScenesViewModel -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="980" HorizontalAlignment="Left">
+            <TextBlock Text="Scenes" Style="{StaticResource H1}" />
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Tap-to-run scenes (stored on this PC)" Style="{StaticResource H2}" />
+                    <TextBlock Style="{StaticResource Muted}" Text="Run a saved snapshot of several devices at once." Margin="0,0,0,10" />
+                    <ItemsControl ItemsSource="{Binding LocalScenes}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,4">
+                                    <Button DockPanel.Dock="Right" Content="Delete" Margin="0"
+                                            Command="{Binding DataContext.DeleteLocalCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                                    <Button DockPanel.Dock="Right" Content="▶ Run" Style="{StaticResource AccentButton}"
+                                            Command="{Binding DataContext.RunLocalCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                                    <TextBlock VerticalAlignment="Center">
+                                        <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
+                                        <Run Text="{Binding Actions.Count, Mode=OneWay, StringFormat='  ({0} device(s))'}" Foreground="{StaticResource TextMuted}" />
+                                    </TextBlock>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Create a scene from the current state" Style="{StaticResource H2}" />
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
+                               Text="Set the lights the way you like on the Devices page, tick them here and save. Running the scene restores power, mode, brightness, colour and every other writable value." />
+                    <ItemsControl ItemsSource="{Binding Devices}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsSelected}" Content="{Binding Name}" Width="220" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <DockPanel Margin="0,10,0,0">
+                        <Button DockPanel.Dock="Right" Content="Save scene" Style="{StaticResource AccentButton}" Command="{Binding CaptureCommand}" Margin="8,0,0,0" />
+                        <TextBox Text="{Binding NewSceneName, UpdateSourceTrigger=PropertyChanged}" />
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Content="Reload from cloud" Command="{Binding RefreshCloudCommand}" Margin="0" />
+                        <TextBlock Text="Cloud scenes" Style="{StaticResource H2}" />
+                    </DockPanel>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
+                               Text="Scenes created in the mobile app (requires a configured Tuya cloud project)." />
+                    <ItemsControl ItemsSource="{Binding CloudScenes}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,4">
+                                    <Button DockPanel.Dock="Right" Content="▶ Run" Style="{StaticResource AccentButton}" Margin="0"
+                                            Command="{Binding DataContext.RunCloudCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="Cloud automations" Style="{StaticResource H2}" Margin="0,16,0,8" />
+                    <ItemsControl ItemsSource="{Binding CloudAutomations}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,4">
+                                    <Button DockPanel.Dock="Right" Margin="0"
+                                            Command="{Binding DataContext.ToggleAutomationCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                                <Setter Property="Content" Value="Enable" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Enabled}" Value="True">
+                                                        <Setter Property="Content" Value="Disable" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                    <TextBlock VerticalAlignment="Center">
+                                        <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
+                                        <Run Text="{Binding Enabled, Mode=OneWay, StringFormat='  (enabled: {0})'}" Foreground="{StaticResource TextMuted}" />
+                                    </TextBlock>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

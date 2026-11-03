@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LedvanceControl.App/LedvanceControl.App.csproj" />
+    <Project Path="src/LedvanceControl.Core/LedvanceControl.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LedvanceControl.Tests/LedvanceControl.Tests.csproj" />
+  </Folder>
+</Solution>
