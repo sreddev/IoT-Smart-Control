@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSIX package manifest for IoT Smart Control (full-trust WPF desktop app).
+
+  BEFORE SUBMITTING TO THE MICROSOFT STORE:
+    1. Reserve the app name in Partner Center and open its "Product identity" page.
+    2. Replace Identity/@Name, Identity/@Publisher and Properties/PublisherDisplayName
+       below with the exact values shown there (Name looks like "1234Sreddev.IoTSmartControl",
+       Publisher looks like "CN=ABCDEF12-3456-7890-ABCD-1234567890AB").
+    3. Keep Version with a revision of 0 (w.x.y.0). The Store rejects non-zero revisions.
+  For LOCAL sideload testing the values below are used as-is and the package is signed
+  with a self-signed certificate whose subject equals Identity/@Publisher (see build-msix.ps1).
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  IgnorableNamespaces="uap rescap desktop">
+
+  <Identity
+    Name="Sreddev.IoTSmartControl"
+    Publisher="CN=Sreddev"
+    Version="1.1.0.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>IoT Smart Control</DisplayName>
+    <PublisherDisplayName>Sreddev</PublisherDisplayName>
+    <Logo>Images\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="App" Executable="IoTSmartControl.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="IoT Smart Control"
+        Description="Unofficial Windows client for LEDVANCE SMART+ WiFi lights and plugs — local (Tuya LAN), Tuya cloud and Samsung SmartThings control, with scenes, schedules and energy monitoring."
+        BackgroundColor="#F0701A"
+        Square150x150Logo="Images\Square150x150Logo.png"
+        Square44x44Logo="Images\Square44x44Logo.png">
+        <uap:DefaultTile
+          ShortName="IoT Smart Control"
+          Square71x71Logo="Images\Square71x71Logo.png"
+          Square310x310Logo="Images\Square310x310Logo.png"
+          Wide310x150Logo="Images\Wide310x150Logo.png">
+          <uap:ShowNameOnTiles>
+            <uap:ShowOn Tile="square150x150Logo" />
+            <uap:ShowOn Tile="wide310x150Logo" />
+          </uap:ShowNameOnTiles>
+        </uap:DefaultTile>
+        <uap:SplashScreen Image="Images\SplashScreen.png" BackgroundColor="#141419" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- Full-trust desktop app (Desktop Bridge). internetClient covers Tuya/SmartThings cloud calls;
+         local Tuya LAN control uses privateNetworkClientServer. -->
+    <rescap:Capability Name="runFullTrust" />
+    <Capability Name="internetClient" />
+    <Capability Name="privateNetworkClientServer" />
+  </Capabilities>
+</Package>

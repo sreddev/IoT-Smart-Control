@@ -8,3 +8,10 @@ obj/
 
 # Local publish output
 publish/
+
+# MSIX build output
+packaging/out/
+*.msix
+*.msixbundle
+*.cer
+*.pfx

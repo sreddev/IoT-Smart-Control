@@ -154,6 +154,18 @@ dotnet run --project src/LedvanceControl.App
 Run `dotnet test` for the protocol tests (a simulated 3.3/3.4/3.5 device lives in
 `tests/LedvanceControl.Tests/FakeTuyaDevice.cs`).
 
+### MSIX / Microsoft Store
+
+The app can be packaged as a Store-ready `.msix` (full-trust desktop/Desktop Bridge, self-contained):
+
+```powershell
+pwsh packaging/build-msix.ps1          # unsigned, for Partner Center upload
+pwsh packaging/build-msix.ps1 -Install # signed + installed locally (run elevated)
+```
+
+See [`packaging/README.md`](packaging/README.md) for the manifest, visual assets, Store requirements
+it satisfies, and the identity values to swap in before submission.
+
 Configuration is stored in `%APPDATA%\IoTSmartControl\config.json` (a config from an earlier build under
 `%APPDATA%\LedvanceControl` is migrated automatically on first run). The Tuya cloud secret, SmartThings client
 secret and refresh token, and device local keys are encrypted with Windows DPAPI for the current user.
