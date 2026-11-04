@@ -35,11 +35,11 @@ The app is published **self-contained**, so the target PC needs no .NET runtime.
 
 1. Trust the exported `packaging/out/IoTSmartControl-Test.cer` into
    **Local Machine → Trusted People** (self-signed certs aren't trusted by default).
-2. `Add-AppxPackage packaging/out/IoTSmartControl_1.2.0.0_x64.msix`
+2. `Add-AppxPackage packaging/out/IoTSmartControl_1.0.0.0_x64.msix`
 
 ## How this meets Microsoft Store requirements
 
-- **Package identity** — `Name`, `Publisher`, 4-part `Version` with a **0 revision** (`1.2.0.0`).
+- **Package identity** — `Name`, `Publisher`, 4-part `Version` with a **0 revision** (`1.0.0.0`).
 - **Architecture** — `x64` (and `arm64` via `-Runtime`). Submit each as a package in one submission.
 - **Target platform** — `Windows.Desktop`, `MinVersion 10.0.17763.0` (1809).
 - **Visual assets** — Square 44/71/150/310, Wide 310×150, Store logo (50), splash, and
