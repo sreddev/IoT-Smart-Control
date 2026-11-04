@@ -12,6 +12,7 @@ public partial class MainWindow : Window
     private readonly MainViewModel _vm = new();
     private readonly Forms.NotifyIcon _tray;
     private bool _exiting;
+    private bool _trayHintShown;
 
     public MainWindow()
     {
@@ -33,6 +34,10 @@ public partial class MainWindow : Window
             Visible = true,
         };
         _tray.DoubleClick += (_, _) => ShowFromTray();
+
+        // Keep the Windows autostart entry in sync with the saved setting. Whether this launch opens
+        // into the tray (started minimized) is decided in App.OnStartup.
+        StartupManager.Apply(_vm.Manager.Config.StartMinimized);
 
         StateChanged += (_, _) => UpdateMaxButton();
         Loaded += async (_, _) => await _vm.RefreshAllAsync();
@@ -123,11 +128,15 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (!_exiting && _vm.Manager.Config.Schedules.Any(s => s.Enabled))
+        if (!_exiting && _vm.Manager.Config.CloseToTray)
         {
             e.Cancel = true;
             Hide();
-            _tray.ShowBalloonTip(3000, "Still running", "Schedules stay active. Right-click the tray icon to exit.", Forms.ToolTipIcon.Info);
+            if (!_trayHintShown)
+            {
+                _tray.ShowBalloonTip(3000, "Still running", "IoT Smart Control is in the tray — schedules stay active. Right-click the icon to exit.", Forms.ToolTipIcon.Info);
+                _trayHintShown = true;
+            }
             return;
         }
         base.OnClosing(e);

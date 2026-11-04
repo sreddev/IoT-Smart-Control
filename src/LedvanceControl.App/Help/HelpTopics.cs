@@ -80,7 +80,7 @@ public static class HelpTopics
             Intro = "Connect your devices and configure the app. Each section below has its own ? with a detailed, step-by-step guide.",
             Steps =
             [
-                "Appearance — switch between Dark and Light themes.",
+                "App settings — theme, start-minimized (autostart to tray) and close-to-tray.",
                 "Tuya cloud project — link your Tuya account to import devices, local keys and schemas (this enables local LAN control).",
                 "SmartThings — connect bulbs that are brand-locked to LEDVANCE but visible in Samsung SmartThings.",
                 "Local network — discover device IP addresses for LAN control, or import a tinytuya devices.json.",
@@ -92,12 +92,13 @@ public static class HelpTopics
 
         ["Settings.Appearance"] = new()
         {
-            Title = "Appearance",
-            Intro = "Light and dark themes for the whole app.",
+            Title = "App settings",
+            Intro = "Appearance and start-up/close behaviour for the app.",
             Steps =
             [
-                "Toggle the switch to change between Light and Dark.",
-                "Dark is the default; your choice is applied immediately and remembered next launch.",
+                "Theme — toggle between Light and Dark. Dark is the default; the choice applies immediately and is remembered.",
+                "Start minimized — when on, the app launches automatically at Windows sign-in and opens straight into the system tray (default: on).",
+                "Close to tray — when on, closing the window keeps the app running in the tray (so schedules keep firing) instead of exiting; use the tray icon's Exit to quit (default: on).",
             ],
         },
 

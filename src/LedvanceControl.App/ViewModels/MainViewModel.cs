@@ -71,6 +71,33 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
 
     public string ThemeLabel => IsDarkTheme ? "Dark" : "Light";
 
+    /// <summary>Launch at Windows start-up, minimised to the tray; persisted and applied to the Run key.</summary>
+    public bool StartMinimized
+    {
+        get => Manager.Config.StartMinimized;
+        set
+        {
+            if (Manager.Config.StartMinimized == value) return;
+            Manager.Config.StartMinimized = value;
+            Manager.Save();
+            StartupManager.Apply(value);
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Closing the window hides to the tray instead of exiting; persisted.</summary>
+    public bool CloseToTray
+    {
+        get => Manager.Config.CloseToTray;
+        set
+        {
+            if (Manager.Config.CloseToTray == value) return;
+            Manager.Config.CloseToTray = value;
+            Manager.Save();
+            OnPropertyChanged();
+        }
+    }
+
     public bool HasNoDevices => Devices.Count == 0;
 
     public string Page
