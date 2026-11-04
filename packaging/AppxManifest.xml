@@ -21,7 +21,7 @@
   <Identity
     Name="Sreddev.IoTSmartControl"
     Publisher="CN=Sreddev"
-    Version="1.1.0.0"
+    Version="1.2.0.0"
     ProcessorArchitecture="x64" />
 
   <Properties>
