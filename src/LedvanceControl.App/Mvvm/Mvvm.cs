@@ -93,21 +93,4 @@ public static class Status
     }
 }
 
-/// <summary>Coalesces rapid changes (slider drags) into one action after a short pause.</summary>
-public sealed class Debouncer(TimeSpan delay)
-{
-    private CancellationTokenSource? _cts;
-
-    public void Run(Func<Task> action)
-    {
-        _cts?.Cancel();
-        var cts = _cts = new CancellationTokenSource();
-        _ = Task.Delay(delay, cts.Token).ContinueWith(async t =>
-        {
-            if (t.IsCanceled) return;
-            try { await action(); }
-            catch (Exception ex) { Status.Error(ex); }
-        }, TaskScheduler.Default);
-    }
-}
 

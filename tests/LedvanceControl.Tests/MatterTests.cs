@@ -146,7 +146,7 @@ public sealed class MatterBridgeClientTests : IDisposable
 
     private static string? FindOnPath() =>
         (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator)
-        .Select(d => Path.Combine(d.Trim('"'), "node.exe")).FirstOrDefault(File.Exists);
+        .Select(d => Path.Combine(d.Trim('"'), OperatingSystem.IsWindows() ? "node.exe" : "node")).FirstOrDefault(File.Exists);
 
     private const string FakeBridge = """
         import { createInterface } from "node:readline";
@@ -178,7 +178,7 @@ public sealed class MatterBridgeClientTests : IDisposable
         if (Node is not { } node) return null; // Node.js not installed on this machine: nothing to test
         var script = Path.Combine(_dir, "fake.mjs");
         File.WriteAllText(script, FakeBridge);
-        return new MatterBridgeClient(new MatterBridgeOptions(node, script, Path.Combine(_dir, "storage")));
+        return new MatterBridgeClient(new MatterBridgeOptions(node, script, Path.Combine(_dir, "storage")) { StorageKey = TestKey });
     }
 
     [Fact]
@@ -228,19 +228,67 @@ public sealed class MatterBridgeClientTests : IDisposable
         Assert.Single(nodes);
     }
 
-    /// <summary>Starts the real bundled bridge (matter.js) with an empty fabric.</summary>
+    private static readonly string TestKey = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+
     [Fact]
-    public async Task RealBridge_StartsWithEmptyFabric()
+    public async Task Bridge_WithoutStorageKey_IsNotStarted()
+    {
+        if (Node is not { } node) return;
+        await using var client = new MatterBridgeClient(new MatterBridgeOptions(node, Path.Combine(_dir, "none.mjs"), Path.Combine(_dir, "s")));
+        var ex = await Assert.ThrowsAsync<MatterException>(() => client.GetNodesAsync());
+        Assert.Contains("storage key", ex.Message);
+        Assert.False(client.IsRunning);
+    }
+
+    /// <summary>
+    /// The real bundled bridge (matter.js): creates a fabric whose files are all encrypted, reopens it with
+    /// the same key, and refuses it under a different key.
+    /// </summary>
+    [Fact]
+    public async Task RealBridge_EncryptsItsFabric_AndNeedsTheSameKey()
     {
         if (Node is not { } node || FindBundle() is not { } bundle) return; // Node.js missing or bridge not built
-        var options = new MatterBridgeOptions(node, bundle, Path.Combine(_dir, "real"));
-        await using var client = new MatterBridgeClient(options);
+        var options = new MatterBridgeOptions(node, bundle, Path.Combine(_dir, "real")) { StorageKey = TestKey };
+        await using (var client = new MatterBridgeClient(options))
+        {
+            var ping = await client.RequestAsync("ping", null, TimeSpan.FromSeconds(60));
+            Assert.Equal(1, ping!["version"]!.GetValue<int>());
+            Assert.Empty(await client.GetNodesAsync());
+            var bad = await Assert.ThrowsAsync<MatterException>(() => client.CommissionAsync("12"));
+            Assert.Contains("11 or 21 digits", bad.Message);
+        }
 
-        var ping = await client.RequestAsync("ping", null, TimeSpan.FromSeconds(60));
-        Assert.Equal(1, ping!["version"]!.GetValue<int>());
-        Assert.Empty(await client.GetNodesAsync());
-        var bad = await Assert.ThrowsAsync<MatterException>(() => client.CommissionAsync("12"));
-        Assert.Contains("11 or 21 digits", bad.Message);
-        Assert.True(Directory.EnumerateFiles(options.StorageDirectory, "*", SearchOption.AllDirectories).Any(), "fabric was persisted");
+        var files = Directory.EnumerateFiles(options.StorageDirectory, "*", SearchOption.AllDirectories)
+            .Where(f => !f.EndsWith(".json") && !f.EndsWith(".lock") && !f.EndsWith(".pid") && new FileInfo(f).Length > 0).ToList();
+        Assert.NotEmpty(files);
+        var rootKey = files.Single(f => f.EndsWith("certificates.rootKeyPair"));
+        var stored = File.ReadAllText(rootKey);
+        Assert.DoesNotContain("privateKey", stored);                 // the fabric root key is not readable
+        Assert.All(files, f => Assert.StartsWith("\"enc:v1:", File.ReadAllText(f)));
+        if (!OperatingSystem.IsWindows()) // the bridge runs with umask 077: owner-only files
+            Assert.All(files, f => Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(f) & (UnixFileMode)0x1FF));
+
+        await using (var again = new MatterBridgeClient(options))   // same key: the fabric opens again
+            Assert.Equal(1, (await again.RequestAsync("ping", null, TimeSpan.FromSeconds(60)))!["version"]!.GetValue<int>());
+
+        var wrong = options with { StorageKey = Convert.ToBase64String(new byte[32]) };
+        await using var intruder = new MatterBridgeClient(wrong);
+        var ex = await Assert.ThrowsAsync<MatterException>(() => intruder.RequestAsync("ping", null, TimeSpan.FromSeconds(60)));
+        Assert.Contains("decrypt", ex.Message);
+    }
+
+    /// <summary>A fabric written in plain text by an older version is encrypted when the bridge starts with a key.</summary>
+    [Fact]
+    public async Task RealBridge_EncryptsLegacyPlainStorage()
+    {
+        if (Node is not { } node || FindBundle() is not { } bundle) return;
+        var dir = Path.Combine(_dir, "legacy", "iot-smart-control");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(_dir, "legacy", "iot-smart-control", "driver.json"), """{"kind":"file","type":"kv"}""");
+        File.WriteAllText(Path.Combine(dir, "test.secret"), "\"plain value\"");
+        var options = new MatterBridgeOptions(node, bundle, Path.Combine(_dir, "legacy")) { StorageKey = TestKey };
+        await using (var client = new MatterBridgeClient(options))
+            await client.RequestAsync("ping", null, TimeSpan.FromSeconds(60));
+        Assert.StartsWith("\"enc:v1:", File.ReadAllText(Path.Combine(dir, "test.secret")));
     }
 }

@@ -16,7 +16,7 @@ public sealed class RoomTests : IDisposable
 
     private DeviceManager Create(Action<AppConfig>? seed = null)
     {
-        var store = new ConfigStore(_path);
+        var store = TestStores.Create(_path);
         if (seed != null)
         {
             var cfg = store.Load();
@@ -40,7 +40,7 @@ public sealed class RoomTests : IDisposable
               "Devices": [ { "Id": "a", "Name": "A", "Room": "Living room" }, { "Id": "b", "Name": "B" } ],
               "Groups": [ { "Id": "g", "Name": "G", "DeviceIds": ["a"] } ] }
             """);
-        await using (var m = new DeviceManager(new ConfigStore(_path)))
+        await using (var m = new DeviceManager(TestStores.Create(_path)))
         {
             var house = Assert.Single(m.Houses);
             Assert.Equal("Casa", house.Name);

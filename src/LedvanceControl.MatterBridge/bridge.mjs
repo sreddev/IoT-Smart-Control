@@ -11,8 +11,19 @@
 // stdout carries protocol lines only; every log line goes to stderr.
 // Values on the wire are normalised (not raw Matter units):
 //   level 0-100 %, hue 0-360°, saturation 0-100 %, colour temperature in Kelvin.
+//
+// Security: the first stdin line must be {"cmd":"init","storageKey":"<base64 AES-256 key>"}. Every value
+// the controller persists (fabric root key, operational key, certificates, paired nodes) is encrypted
+// with it (AES-256-GCM, bound to its storage key name) before it touches the disk; values written in
+// plain text by older versions are encrypted on start. The key comes over stdin, not argv/env, which
+// other processes can read. New files are owner-only (umask 077).
 
-import { Environment, Logger, LogLevel } from "@matter/main";
+process.umask(0o077);
+
+import { Environment, Logger, LogLevel, StorageService } from "@matter/main";
+import { fromJson, toJson } from "@matter/general";
+import { FileStorageDriver } from "@matter/nodejs";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { ColorControl, FixedLabel, GeneralCommissioning, LevelControl, OnOff, UserLabel } from "@matter/main/clusters";
 import { ManualPairingCodeCodec, NodeId, QrPairingCodeCodec } from "@matter/main/types";
 import { NodeStates } from "@project-chip/matter.js/device";
@@ -35,9 +46,90 @@ function send(obj) {
     process.stdout.write(JSON.stringify(obj, (_k, v) => (typeof v === "bigint" ? v.toString() : v)) + "\n");
 }
 
+// ------------------------------------------------------------------ encrypted storage
+
+const ENC = "enc:v1:";
+let storageKey; // Buffer(32), set by the init line before the controller starts
+
+/** Binds a ciphertext to where it is stored, so values can't be swapped between files. */
+const aadOf = (contexts, key) => Buffer.from([...contexts, key].join("\u001f"), "utf8");
+
+function seal(contexts, key, value) {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", storageKey, iv);
+    cipher.setAAD(aadOf(contexts, key));
+    const data = Buffer.concat([cipher.update(toJson(value), "utf8"), cipher.final()]);
+    return ENC + Buffer.concat([iv, cipher.getAuthTag(), data]).toString("base64");
+}
+
+function open(contexts, key, stored) {
+    if (typeof stored !== "string" || !stored.startsWith(ENC)) return stored; // plain value (older version)
+    const raw = Buffer.from(stored.slice(ENC.length), "base64");
+    try {
+        const decipher = createDecipheriv("aes-256-gcm", storageKey, raw.subarray(0, 12));
+        decipher.setAAD(aadOf(contexts, key));
+        decipher.setAuthTag(raw.subarray(12, 28));
+        return fromJson(Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString("utf8"));
+    } catch {
+        throw new Error(`Matter storage value '${[...contexts, key].join(".")}' could not be decrypted (wrong or missing storage key).`);
+    }
+}
+
+/**
+ * The standard per-value file driver with every value encrypted. Registered under the id "file" so it
+ * replaces the built-in driver for the same on-disk layout (no storage migration is triggered).
+ */
+class EncryptedFileStorageDriver extends FileStorageDriver {
+    static id = "file";
+
+    static async create(namespace) {
+        const driver = new EncryptedFileStorageDriver(namespace);
+        await driver.initialize();
+        await driver.encryptLegacyValues();
+        return driver;
+    }
+
+    async get(contexts, key) { return open(contexts, key, await super.get(contexts, key)); }
+
+    async set(contexts, keyOrValues, value) {
+        if (typeof keyOrValues === "string") return super.set(contexts, keyOrValues, seal(contexts, keyOrValues, value));
+        const sealed = {};
+        for (const [k, v] of Object.entries(keyOrValues)) sealed[k] = seal(contexts, k, v);
+        return super.set(contexts, sealed);
+    }
+
+    async values(contexts) {
+        const out = {};
+        for (const [k, v] of Object.entries(await super.values(contexts))) out[k] = open(contexts, k, v);
+        return out;
+    }
+
+    /** Rewrites every value still stored in plain text (from versions before storage encryption). */
+    async encryptLegacyValues() {
+        let count = 0;
+        const walk = async contexts => {
+            for (const key of contexts.length ? await this.keys(contexts) : []) {
+                const raw = await super.get(contexts, key);
+                if (raw !== undefined && !(typeof raw === "string" && raw.startsWith(ENC))) {
+                    await this.set(contexts, key, raw);
+                    count++;
+                }
+            }
+            for (const child of await this.contexts(contexts)) await walk([...contexts, child]);
+        };
+        await walk([]);
+        if (count > 0) log(`encrypted ${count} stored value(s) written in plain text by an older version`);
+    }
+}
+
 // ------------------------------------------------------------------ controller
 
 const environment = Environment.default;
+{
+    const storage = environment.get(StorageService);
+    storage.registerDriver(EncryptedFileStorageDriver); // replaces the plain "file" driver
+    storage.configuredDriver = "file";
+}
 // The filesystem root is resolved lazily from "path.root"; the fabric (keys, certificates and the
 // list of paired nodes) is persisted underneath it.
 if (args.storage) environment.vars.set("path.root", args.storage);
@@ -210,7 +302,10 @@ function describe(id, node) {
 
 // ------------------------------------------------------------------ commands
 
-const TRANSITION = 3; // tenths of a second
+// Fade for level/colour changes, in tenths of a second. 0 = change at once. Measured on LEDVANCE
+// SMART MAT bulbs (fw 1.1.0): with 0 they reach the new level in ~0.2 s, but ANY non-zero value
+// (even 0.1 s), or none, makes them ramp slowly over ~4.5-5 s, which felt like a 2-3 s lag.
+const TRANSITION = 0;
 
 const handlers = {
     async ping() {
@@ -292,6 +387,10 @@ const handlers = {
 
     async get({ nodeId }) {
         const node = await pairedNode(nodeId);
+        // Right after start-up the CASE session may still be connecting: give it a moment instead of
+        // reporting the bulb offline (the app's launch refresh lands exactly in that window).
+        for (const t0 = Date.now(); node.connectionState !== NodeStates.Connected && Date.now() - t0 < 12000;)
+            await new Promise(r => setTimeout(r, 200));
         const ep = lightEndpoint(node);
         if (!ep) throw new Error("This Matter device has no On/Off endpoint.");
         return { ...describe(String(nodeId), node), state: await readState(String(nodeId), ep) };
@@ -308,24 +407,40 @@ const handlers = {
         const opts = { optionsMask: {}, optionsOverride: {} };
         const s = states.get(id) ?? {};
 
+        const onOff = ep.getClusterClient(OnOff.Cluster);
         if (on === false) {
-            await ep.getClusterClient(OnOff.Cluster).off();
+            // Plain Off uses the bulb's built-in fade (these bulbs don't let us read or set it);
+            // OffWithEffect "no fade" switches off at once.
+            if (onOff.supportedFeatures?.lighting) {
+                await onOff.offWithEffect({ effectIdentifier: OnOff.EffectIdentifier.DelayedAllOff, effectVariant: OnOff.DelayedAllOffEffectVariant.NoFade });
+            } else {
+                await onOff.off();
+            }
             s.on = false;
             states.set(id, s);
             return publicState(s);
         }
-        // moveToLevelWithOnOff switches the light on by itself; otherwise send an explicit On.
-        if (on === true && !(typeof level === "number" && c.level)) {
-            await ep.getClusterClient(OnOff.Cluster).on();
-            s.on = true;
-        }
-        if (typeof level === "number" && c.level) {
+        const lc = c.level ? ep.getClusterClient(LevelControl.Cluster) : undefined;
+        const cc = ep.getClusterClient(ColorControl.Cluster);
+        // One command per aspect, one after another (each is acknowledged in ~30-60 ms).
+        if (typeof level === "number" && lc) {
+            // moveToLevelWithOnOff also switches the light on
             const raw = Math.min(254, Math.max(1, Math.round((level * 254) / 100)));
-            await ep.getClusterClient(LevelControl.Cluster).moveToLevelWithOnOff({ level: raw, transitionTime: tt, ...opts });
+            await lc.moveToLevelWithOnOff({ level: raw, transitionTime: tt, ...opts });
             s.level = Math.round(level);
             s.on = true;
+        } else if (on === true) {
+            // Plain On fades in with the bulb's own (slow) timing. "Move to the brightness it has, switching
+            // on, in 0 s" lights it at once; the bulb keeps CurrentLevel while off, so read it fresh.
+            const raw = lc ? await safe(() => lc.getCurrentLevelAttribute(true)) : undefined;
+            if (typeof raw === "number" && raw > 0) {
+                await lc.moveToLevelWithOnOff({ level: raw, transitionTime: 0, ...opts });
+                s.level = levelToPercent(raw);
+            } else {
+                await onOff.on();
+            }
+            s.on = true;
         }
-        const cc = ep.getClusterClient(ColorControl.Cluster);
         if (cc && typeof hue === "number" && typeof saturation === "number") {
             if (c.hs) {
                 await cc.moveToHueAndSaturation({
@@ -373,6 +488,15 @@ const handlers = {
             if (ul) entry.userLabels = await safe(() => ul.getLabelListAttribute(true));
             const fl = ep.getClusterClient(FixedLabel.Cluster);
             if (fl) entry.fixedLabels = await safe(() => fl.getLabelListAttribute(true));
+            // the bulb's own fades (tenths of a second): plain On/Off commands use these, not our transitionTime
+            const lc = ep.getClusterClient(LevelControl.Cluster);
+            if (lc) entry.transitions = {
+                onOffTransitionTime: await safe(() => lc.getOnOffTransitionTimeAttribute(true)),
+                onTransitionTime: await safe(() => lc.getOnTransitionTimeAttribute(true)),
+                offTransitionTime: await safe(() => lc.getOffTransitionTimeAttribute(true)),
+            };
+            const oo = ep.getClusterClient(OnOff.Cluster);
+            if (oo) entry.onOffLighting = !!oo.supportedFeatures?.lighting;
             out.endpoints.push(entry);
             stack.push(...ep.getChildEndpoints());
         }
@@ -458,7 +582,25 @@ async function shutdown(code) {
     process.exit(code);
 }
 
-await controller.start();
+// The first stdin line carries the storage key; nothing touches the storage before it arrives.
+const rl = createInterface({ input: process.stdin });
+const init = await new Promise(resolve => {
+    rl.once("line", line => { try { resolve(JSON.parse(line)); } catch { resolve(null); } });
+    rl.once("close", () => resolve(null));
+});
+const keyBytes = init?.cmd === "init" && typeof init.storageKey === "string" ? Buffer.from(init.storageKey, "base64") : null;
+if (!keyBytes || keyBytes.length !== 32) {
+    log("refusing to start: the first line must be an init message with a 32-byte base64 storageKey");
+    process.exit(2);
+}
+storageKey = keyBytes;
+
+try {
+    await controller.start();
+} catch (e) {
+    log(`Error: could not open the Matter storage: ${e?.message ?? e}`);
+    process.exit(3);
+}
 
 // Connect every paired node in the background; state arrives as events.
 for (const nodeId of controller.getCommissionedNodes()) {
@@ -467,7 +609,6 @@ for (const nodeId of controller.getCommissionedNodes()) {
 
 send({ event: "ready", nodes: controller.getCommissionedNodes().map(String) });
 
-const rl = createInterface({ input: process.stdin });
 rl.on("line", async line => {
     if (!line.trim()) return;
     let req;

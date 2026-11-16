@@ -158,6 +158,39 @@ public static class SmartThingsMapping
         return cmds;
     }
 
+    /// <summary>
+    /// The power / brightness commands among <paramref name="sent"/> that the device's reported status
+    /// (<paramref name="main"/>) does not reflect. Colour and temperature are not compared: the device
+    /// rounds them, so they would look "not applied" when they were.
+    /// </summary>
+    public static JsonArray NotApplied(JsonArray sent, JsonObject main)
+    {
+        var missing = new JsonArray();
+        foreach (var node in sent)
+        {
+            if (node is not JsonObject cmd) continue;
+            var cap = cmd["capability"]?.ToString();
+            var command = cmd["command"]?.ToString();
+            bool applied;
+            if (cap == CapSwitch)
+            {
+                applied = string.Equals(main[CapSwitch]?["switch"]?["value"]?.ToString(), command, StringComparison.OrdinalIgnoreCase);
+            }
+            else if (cap == CapLevel && command == "setLevel")
+            {
+                var want = cmd["arguments"]?[0]?.GetValue<int>();
+                var have = double.TryParse(main[CapLevel]?["level"]?["value"]?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var d) ? d : (double?)null;
+                applied = want == null || (have != null && Math.Abs(have.Value - want.Value) <= 1);
+            }
+            else
+            {
+                continue;
+            }
+            if (!applied) missing.Add(cmd.DeepClone());
+        }
+        return missing;
+    }
+
     public static double KelvinToPercent(double kelvin) =>
         Math.Clamp((kelvin - MinKelvin) * 100.0 / (MaxKelvin - MinKelvin), 0, 100);
 

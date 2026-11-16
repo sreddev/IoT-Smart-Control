@@ -24,7 +24,7 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
     {
         Runtime = runtime;
         _manager = manager;
-        MoveHouseCommand = new RelayCommand(MoveHouse, _ => MoveTargetHouseId != null && (!MoveRule.NeedsSmartPlusConfirmation || MoveConfirmed));
+        MoveHouseCommand = new RelayCommand(MoveHouse, _ => IsMovePending && CanMoveHouse && (!MoveRule.NeedsSmartPlusConfirmation || MoveConfirmed));
         EditCommand = new RelayCommand(BeginEdit);
         SaveEditCommand = new RelayCommand(SaveEdit, _ => !string.IsNullOrWhiteSpace(EditName));
         CancelEditCommand = new RelayCommand(() => IsEditing = false);
@@ -40,6 +40,7 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
         });
         RebuildDps();
         Runtime.Changed += _ => Application.Current?.Dispatcher.BeginInvoke(Update);
+        Runtime.Resent += (_, n) => Status.Info($"{Name}: SmartThings had not applied the last change; sent it again.");
         Update();
     }
 
@@ -47,7 +48,16 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
     public string Id => Runtime.Id;
     public string Name => Runtime.Config.Name;
     public string Room => string.IsNullOrWhiteSpace(Runtime.Config.Room) ? "No room" : Runtime.Config.Room!;
-    public string Subtitle => Runtime.Config.ProductName ?? Runtime.Config.Category ?? Runtime.Config.Id;
+    /// <summary>Product name, or else a readable device type ("Light", "Plug"…) instead of the raw category code.</summary>
+    public string Subtitle => Runtime.Config.ProductName ?? Runtime.Config.Category switch
+    {
+        "dj" or "dd" or "fwd" or "xdd" or "dc" => "Light",
+        "cz" or "pc" => "Plug",
+        "kg" or "tdq" => "Switch",
+        "fs" => "Fan",
+        null or "" => IsLight ? "Light" : "Device",
+        var other => other,
+    };
     public bool IsLight => Runtime.Light != null;
     public bool HasPower => Runtime.PowerCode != null;
     public LightControlViewModel Light { get; }
@@ -93,10 +103,30 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
     public bool CanMoveHouse => MoveRule.Allowed;
     public string? MoveBlockedReason => MoveRule.Allowed ? null : MoveRule.Reason;
     public bool MoveNeedsConfirmation => MoveRule.NeedsSmartPlusConfirmation;
-    public IReadOnlyList<HouseConfig> OtherHouses { get; private set; } = [];
-    public string? MoveTargetHouseId { get => _moveTargetHouseId; set => Set(ref _moveTargetHouseId, value); }
+    /// <summary>Every house, the device's own included (it is the initial selection).</summary>
+    public IReadOnlyList<HouseConfig> AllHouses { get; private set; } = [];
+    /// <summary>House picked in the editor's House box; equals <see cref="HouseId"/> until the user picks another.</summary>
+    public string? MoveTargetHouseId
+    {
+        get => _moveTargetHouseId;
+        set
+        {
+            if (!Set(ref _moveTargetHouseId, value)) return;
+            MoveConfirmed = false;
+            OnPropertyChanged(nameof(IsMovePending));
+            OnPropertyChanged(nameof(ShowMoveConfirmation));
+            CommandManager.InvalidateRequerySuggested(); // Move's enabled state
+        }
+    }
+    /// <summary>Another house than the current one is selected.</summary>
+    public bool IsMovePending => MoveTargetHouseId != null && MoveTargetHouseId != HouseId;
+    public bool ShowMoveConfirmation => IsMovePending && MoveNeedsConfirmation;
     /// <summary>"I already moved this bulb to that house in the LEDVANCE SMART+ app."</summary>
-    public bool MoveConfirmed { get => _moveConfirmed; set => Set(ref _moveConfirmed, value); }
+    public bool MoveConfirmed
+    {
+        get => _moveConfirmed;
+        set { if (Set(ref _moveConfirmed, value)) CommandManager.InvalidateRequerySuggested(); }
+    }
     public ICommand MoveHouseCommand { get; }
 
     private void MoveHouse()
@@ -114,10 +144,12 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
 
     private void BeginEdit()
     {
-        OtherHouses = _manager.Houses.Where(h => h.Id != HouseId).ToList();
-        MoveTargetHouseId = OtherHouses.FirstOrDefault()?.Id;
+        AllHouses = _manager.Houses.ToList();
+        OnPropertyChanged(nameof(AllHouses)); // items first, then the selection, so the box keeps it
+        _moveTargetHouseId = null;
+        MoveTargetHouseId = HouseId;
         MoveConfirmed = false;
-        foreach (var p in new[] { nameof(OtherHouses), nameof(HouseName), nameof(CanMoveHouse), nameof(MoveBlockedReason), nameof(MoveNeedsConfirmation) })
+        foreach (var p in new[] { nameof(HouseName), nameof(CanMoveHouse), nameof(MoveBlockedReason), nameof(MoveNeedsConfirmation) })
             OnPropertyChanged(p);
         // rooms first: replacing ItemsSource after setting the text would clear it again
         KnownRooms = _manager.RoomsOf(HouseId ?? _manager.CurrentHouse.Id);
@@ -126,6 +158,8 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
         EditRoom = Runtime.Config.Room ?? "";
         OnPropertyChanged(nameof(NameSourceHint));
         IsEditing = true;
+        // the fields were filled in code, not typed: make Save/Move re-evaluate now
+        CommandManager.InvalidateRequerySuggested();
     }
 
     private void SaveEdit()
@@ -162,8 +196,11 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
         _ => "",                      // generic
     };
 
-    public string StatusText => Runtime.Online
-        ? Runtime.LastTransport switch { Transport.Lan => "Online · LAN", Transport.Cloud => "Online · Cloud", Transport.SmartThings => "Online · SmartThings", Transport.Matter => "Online · Matter (LAN)", _ => "Online" }
+    /// <summary>This device is being asked for its state right now (its card shows a spinner).</summary>
+    public bool IsRefreshing => Runtime.IsRefreshing;
+
+    public string StatusText => Runtime.IsRefreshing ? "Refreshing…" : Runtime.Online
+        ?Runtime.LastTransport switch { Transport.Lan => "Online · LAN", Transport.Cloud => "Online · Cloud", Transport.SmartThings => "Online · SmartThings", Transport.Matter => "Online · Matter (LAN)", _ => "Online" }
         : Runtime.LastError != null ? "Offline · " + Runtime.LastError : "Not refreshed";
 
     public bool IsOnline => Runtime.Online;
@@ -203,6 +240,7 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
         Energy.Load();
         foreach (var dp in Dps) dp.Load();
         OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(IsRefreshing));
         OnPropertyChanged(nameof(IsOnline));
         OnPropertyChanged(nameof(Name));
         OnPropertyChanged(nameof(Room));
@@ -222,7 +260,7 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
 public sealed class DpViewModel : ObservableObject
 {
     private readonly DeviceRuntime _device;
-    private readonly Debouncer _debounce = new(TimeSpan.FromMilliseconds(300));
+    private readonly LatestOnlySender _debounce = new(TimeSpan.FromMilliseconds(150), Status.Error);
     private bool _suppress;
     private bool _bool;
     private long _raw;
@@ -305,7 +343,7 @@ public sealed class DpViewModel : ObservableObject
         switch (v)
         {
             case bool b: BoolValue = b; break;
-            case long l:
+            case long l when !_debounce.IsBusy: // mid-drag the device's value is behind the slider
                 _raw = l;
                 OnPropertyChanged(nameof(SliderPosition));
                 break;

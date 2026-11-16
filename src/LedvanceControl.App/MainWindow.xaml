@@ -18,11 +18,11 @@
                 <TextBlock Text="IoT Smart Control" Foreground="{DynamicResource TextMuted}" FontSize="12" VerticalAlignment="Center" Margin="10,0,0,0" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
-                <Button x:Name="MinBtn" Style="{StaticResource CaptionButton}" Content="&#xE921;" Click="Minimize_Click"
+                <Button x:Name="MinBtn" AutomationProperties.Name="Minimize" Style="{StaticResource CaptionButton}" Content="&#xE921;" Click="Minimize_Click"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True" ToolTip="Minimise" />
-                <Button x:Name="MaxBtn" Style="{StaticResource CaptionButton}" Content="&#xE922;" Click="MaxRestore_Click"
+                <Button x:Name="MaxBtn" AutomationProperties.Name="Maximize" Style="{StaticResource CaptionButton}" Content="&#xE922;" Click="MaxRestore_Click"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True" ToolTip="Maximise" />
-                <Button x:Name="CloseBtn" Style="{StaticResource CloseButton}" Content="&#xE8BB;" Click="CloseWin_Click"
+                <Button x:Name="CloseBtn" AutomationProperties.Name="Close" Style="{StaticResource CloseButton}" Content="&#xE8BB;" Click="CloseWin_Click"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True" ToolTip="Close" />
             </StackPanel>
         </Grid>
@@ -41,60 +41,156 @@
 
             <!-- Sidebar -->
             <DockPanel Grid.RowSpan="2" Grid.Column="0" Background="{DynamicResource SidebarBg}">
-                <StackPanel DockPanel.Dock="Top" Margin="22,18,10,26">
+                <StackPanel DockPanel.Dock="Top" Margin="22,18,10,0">
                     <TextBlock Text="IoT Smart Control" Foreground="{DynamicResource Accent}" FontWeight="Bold" FontSize="19" />
                     <TextBlock Text="for Windows" Foreground="{DynamicResource SidebarFg}" FontSize="12" />
-                    <!-- House switcher, like the home picker at the top of the SMART+ app; houses are managed on the Rooms page -->
-                    <StackPanel Orientation="Horizontal" Margin="0,16,0,4">
-                        <TextBlock Text="&#xE80F;" FontFamily="{StaticResource Icons}" Foreground="{DynamicResource Accent}"
-                                   FontSize="12" Margin="0,1,6,0" VerticalAlignment="Center" />
-                        <TextBlock Text="House" Foreground="{DynamicResource SidebarFg}" FontSize="11" VerticalAlignment="Center" />
-                    </StackPanel>
-                    <ComboBox ItemsSource="{Binding Houses}" SelectedValuePath="Id"
-                              SelectedValue="{Binding CurrentHouseId}" FontWeight="SemiBold" Margin="0,0,8,0"
-                              ToolTip="Switch house — Devices, Rooms and Groups show the selected house. Add, rename or delete houses on the Rooms page.">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate><TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" /></DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
                 </StackPanel>
+                    <!-- House picker, like the home picker at the top of the SMART+ app: switch houses, and
+                         "Manage houses…" adds, renames and deletes them. A filled field spanning the nav width:
+                         8 px margin + 1 px border + 13 px padding puts the icon on the nav icon column, and the
+                         icon's size/spacing match the nav items so the name starts on the nav label column. -->
+                    <Grid DockPanel.Dock="Top" DataContext="{Binding HousePicker}" Margin="8,18,8,20">
+                        <ToggleButton x:Name="HouseToggle" IsChecked="{Binding IsOpen}" Height="40" Cursor="Hand"
+                                      AutomationProperties.Name="{Binding CurrentName, StringFormat='House: {0}'}"
+                                      IsHitTestVisible="{Binding IsOpen, ElementName=HousePopup, Converter={StaticResource InverseBool}}"
+                                      ToolTip="Switch house, or manage houses (add, rename, delete)">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border x:Name="Bd" Background="{DynamicResource InputBg}" BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="6" Padding="13,0">
+                                        <DockPanel>
+                                            <TextBlock DockPanel.Dock="Left" Text="&#xE80F;" FontFamily="{StaticResource Icons}" FontSize="14"
+                                                       Foreground="{DynamicResource Accent}" Margin="0,2,12,0" VerticalAlignment="Center" />
+                                            <TextBlock DockPanel.Dock="Right" Text="&#xE70D;" FontFamily="{StaticResource Icons}" FontSize="10"
+                                                       Foreground="{DynamicResource TextMuted}" Margin="8,1,0,0" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding CurrentName}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextMain}"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        </DockPanel>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" /></Trigger>
+                                        <Trigger Property="IsChecked" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" /></Trigger>
+                                        <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" /></Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+                        <Popup x:Name="HousePopup" IsOpen="{Binding IsOpen}" StaysOpen="False" PlacementTarget="{Binding ElementName=HouseToggle}"
+                               Placement="Bottom" VerticalOffset="4" AllowsTransparency="True" PopupAnimation="Fade">
+                            <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="8"
+                                    Padding="6" Width="330" Margin="0,0,8,8">
+                                <Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="3" Opacity="0.35" /></Border.Effect>
+                                <Grid>
+                                    <!-- List: pick a house -->
+                                    <StackPanel Visibility="{Binding IsManaging, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
+                                        <ItemsControl ItemsSource="{Binding Options}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button Command="{Binding DataContext.PickCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}" Style="{StaticResource MenuRow}" Padding="9,6">
+                                                        <DockPanel>
+                                                            <TextBlock DockPanel.Dock="Right" Text="&#xE73E;" FontFamily="{StaticResource Icons}" Foreground="{DynamicResource Accent}"
+                                                                       VerticalAlignment="Center" Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVis}}" />
+                                                            <StackPanel>
+                                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Text="{Binding Summary}" Style="{StaticResource Muted}" FontSize="11" />
+                                                            </StackPanel>
+                                                        </DockPanel>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <Border Height="1" Background="{DynamicResource Border}" Margin="4,4" />
+                                        <Button Command="{Binding ManageCommand}" Style="{StaticResource MenuRow}" Padding="9,7">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE713;" FontFamily="{StaticResource Icons}" Margin="0,1,8,0" VerticalAlignment="Center" />
+                                                <TextBlock Text="Manage houses…" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+
+                                    <!-- Manage: add, rename, delete -->
+                                    <StackPanel Margin="4" Visibility="{Binding IsManaging, Converter={StaticResource BoolToVis}}">
+                                        <DockPanel Margin="0,0,0,8">
+                                            <Button DockPanel.Dock="Right" Content="Done" Command="{Binding DoneCommand}" Margin="0" />
+                                            <TextBlock Text="Houses" Style="{StaticResource H2}" Margin="0" VerticalAlignment="Center" />
+                                        </DockPanel>
+                                        <ItemsControl ItemsSource="{Binding Options}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Margin="0,0,0,8">
+                                                        <DockPanel>
+                                                            <Button DockPanel.Dock="Right" Content="Delete" Margin="6,0,0,0"
+                                                                    Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                    CommandParameter="{Binding}" ToolTip="{Binding DeleteTip}" ToolTipService.ShowOnDisabled="True" />
+                                                            <Button DockPanel.Dock="Right" Content="Save" Margin="6,0,0,0"
+                                                                    Command="{Binding DataContext.SaveCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                    CommandParameter="{Binding}" />
+                                                            <TextBox Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}" ToolTip="Rename this house">
+                                                                <TextBox.InputBindings>
+                                                                    <KeyBinding Key="Enter" CommandParameter="{Binding}"
+                                                                                Command="{Binding DataContext.SaveCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                                                                </TextBox.InputBindings>
+                                                            </TextBox>
+                                                        </DockPanel>
+                                                        <TextBlock Text="{Binding Summary}" Style="{StaticResource Muted}" FontSize="11" Margin="2,2,0,0" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <Border Height="1" Background="{DynamicResource Border}" Margin="0,2,0,8" />
+                                        <TextBlock Text="New house" Style="{StaticResource Label}" />
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Content="Add" Style="{StaticResource AccentButton}" Command="{Binding AddCommand}" Margin="6,0,0,0" />
+                                            <TextBox Text="{Binding NewHouseName, UpdateSourceTrigger=PropertyChanged}" ToolTip="Name of the new house">
+                                                <TextBox.InputBindings>
+                                                    <KeyBinding Key="Enter" Command="{Binding AddCommand}" />
+                                                </TextBox.InputBindings>
+                                            </TextBox>
+                                        </DockPanel>
+                                        <TextBlock Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"
+                                                   Text="New houses don't change the one you're viewing. Your only house, or one that still has devices, can't be deleted." />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </Popup>
+                    </Grid>
                 <StackPanel DockPanel.Dock="Top">
-                    <RadioButton Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Devices"
+                    <RadioButton Style="{StaticResource NavButton}" AutomationProperties.Name="Devices" Command="{Binding NavigateCommand}" CommandParameter="Devices"
                                  IsChecked="{Binding Page, Mode=OneWay, Converter={StaticResource EqualsConv}, ConverterParameter=Devices}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xEA80;" FontFamily="{StaticResource Icons}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Margin="0,2,12,0" />
                             <TextBlock Text="Devices" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Rooms"
+                    <RadioButton Style="{StaticResource NavButton}" AutomationProperties.Name="Rooms" Command="{Binding NavigateCommand}" CommandParameter="Rooms"
                                  IsChecked="{Binding Page, Mode=OneWay, Converter={StaticResource EqualsConv}, ConverterParameter=Rooms}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE80F;" FontFamily="{StaticResource Icons}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Margin="0,2,12,0" />
                             <TextBlock Text="Rooms" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Groups"
+                    <RadioButton Style="{StaticResource NavButton}" AutomationProperties.Name="Groups" Command="{Binding NavigateCommand}" CommandParameter="Groups"
                                  IsChecked="{Binding Page, Mode=OneWay, Converter={StaticResource EqualsConv}, ConverterParameter=Groups}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE71D;" FontFamily="{StaticResource Icons}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Margin="0,2,12,0" />
                             <TextBlock Text="Groups" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Scenes"
+                    <RadioButton Style="{StaticResource NavButton}" AutomationProperties.Name="Scenes" Command="{Binding NavigateCommand}" CommandParameter="Scenes"
                                  IsChecked="{Binding Page, Mode=OneWay, Converter={StaticResource EqualsConv}, ConverterParameter=Scenes}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE768;" FontFamily="{StaticResource Icons}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Margin="0,2,12,0" />
                             <TextBlock Text="Scenes" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Schedules"
+                    <RadioButton Style="{StaticResource NavButton}" AutomationProperties.Name="Schedules" Command="{Binding NavigateCommand}" CommandParameter="Schedules"
                                  IsChecked="{Binding Page, Mode=OneWay, Converter={StaticResource EqualsConv}, ConverterParameter=Schedules}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE823;" FontFamily="{StaticResource Icons}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Margin="0,2,12,0" />
                             <TextBlock Text="Schedules" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Settings"
+                    <RadioButton Style="{StaticResource NavButton}" AutomationProperties.Name="Settings" Command="{Binding NavigateCommand}" CommandParameter="Settings"
                                  IsChecked="{Binding Page, Mode=OneWay, Converter={StaticResource EqualsConv}, ConverterParameter=Settings}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE713;" FontFamily="{StaticResource Icons}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Margin="0,2,12,0" />
@@ -128,18 +224,22 @@
 
             <!-- Status bar -->
             <Border Grid.Row="1" Grid.Column="2" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="24,6" Background="{DynamicResource CardBg}">
-                <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusText}">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding StatusIsError}" Value="True">
-                                    <Setter Property="Foreground" Value="{DynamicResource Bad}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+                <DockPanel>
+                    <views:Spinner DockPanel.Dock="Left" Width="12" Height="12" Margin="0,1,8,0" VerticalAlignment="Center"
+                                   Visibility="{Binding IsRefreshing, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusText}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding StatusIsError}" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource Bad}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </DockPanel>
             </Border>
         </Grid>
     </DockPanel>

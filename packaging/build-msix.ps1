@@ -14,6 +14,8 @@
 .PARAMETER Runtime     win-x64 (default) or win-arm64.
 .PARAMETER Sign        Also sign with a self-signed cert (local testing only).
 .PARAMETER Install     Implies -Sign; trusts the cert and installs the package.
+.PARAMETER NodeDir     Folder holding node.exe (+ LICENSE) to bundle as matter-bridge\node, so Matter
+                        works without a separate Node.js install.
 
 .EXAMPLE
   pwsh packaging/build-msix.ps1                 # unsigned .msix for Store upload
@@ -23,7 +25,8 @@
 param(
     [ValidateSet('win-x64', 'win-arm64')] [string]$Runtime = 'win-x64',
     [switch]$Sign,
-    [switch]$Install
+    [switch]$Install,
+    [string]$NodeDir
 )
 
 $ErrorActionPreference = 'Stop'
@@ -53,6 +56,12 @@ if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed.' }
 Write-Host "==> Staging manifest + visual assets…" -ForegroundColor Cyan
 Copy-Item (Join-Path $pkgDir 'AppxManifest.xml') $stage -Force
 Copy-Item (Join-Path $pkgDir 'Images') $stage -Recurse -Force
+if ($NodeDir) {
+    # bundled Node.js runtime for the Matter bridge (the app prefers matter-bridge\node\node.exe)
+    $nodeDest = Join-Path $stage 'matter-bridge/node'
+    New-Item -ItemType Directory -Force -Path $nodeDest | Out-Null
+    Copy-Item (Join-Path $NodeDir '*') $nodeDest -Force
+}
 # MSIX cannot contain a .pdb-only app; keep the folder lean.
 Get-ChildItem $stage -Filter *.pdb -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
 

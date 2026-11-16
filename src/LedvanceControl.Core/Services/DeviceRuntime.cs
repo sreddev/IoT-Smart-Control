@@ -18,6 +18,13 @@ public sealed class DeviceRuntime : IAsyncDisposable
     private readonly DeviceManager _manager;
     private readonly object _gate = new();
     private readonly Dictionary<string, object?> _state = new();
+    /// <summary>
+    /// Values this app just sent, by code, and until when they win over what the device/cloud reports:
+    /// a status read or a late confirmation can carry the value from before the change, which used to
+    /// flip a switch or slider back (so a click looked ignored).
+    /// </summary>
+    private readonly Dictionary<string, (object? Value, long Until)> _pending = new();
+    private long _writeSeq;
     private TuyaLocalClient? _local;
     private string? _localSignature;
 
@@ -66,7 +73,25 @@ public sealed class DeviceRuntime : IAsyncDisposable
 
     // ---------------------------------------------------------------- operations
 
+    /// <summary>True while <see cref="RefreshAsync"/> is asking the device for its state (UI shows a spinner).</summary>
+    public bool IsRefreshing { get; private set; }
+
     public async Task RefreshAsync(CancellationToken ct = default)
+    {
+        IsRefreshing = true;
+        Changed?.Invoke(this);
+        try
+        {
+            await RefreshCoreAsync(ct);
+        }
+        finally
+        {
+            IsRefreshing = false;
+            Changed?.Invoke(this);
+        }
+    }
+
+    private async Task RefreshCoreAsync(CancellationToken ct)
     {
         if (IsMatter)
         {
@@ -134,6 +159,29 @@ public sealed class DeviceRuntime : IAsyncDisposable
 
     public async Task SetAsync(IReadOnlyDictionary<string, object?> byCode, CancellationToken ct = default)
     {
+        // Show the change at once and hold it against stale reports while it travels to the device.
+        var hold = IsMatter || (!CanUseSmartThings && CanUseLan && (Config.PreferLocal || !CanUseCloud)) ? LocalHold : CloudHold;
+        var seq = BeginWrite(byCode, hold);
+        try
+        {
+            await SendAsync(byCode, seq, ct);
+        }
+        catch
+        {
+            EndWriteFailed(byCode);
+            throw;
+        }
+    }
+
+    /// <summary>How long a value just sent wins over reports for LAN / Matter devices (they answer fast).</summary>
+    internal static TimeSpan LocalHold { get; set; } = TimeSpan.FromSeconds(2);
+    /// <summary>How long it wins for cloud devices (SmartThings / Tuya cloud confirm within ~0.5-3 s).</summary>
+    internal static TimeSpan CloudHold { get; set; } = TimeSpan.FromSeconds(5);
+    /// <summary>After the last SmartThings change, when to check that the device really applied it.</summary>
+    internal static TimeSpan VerifyAfter { get; set; } = TimeSpan.FromSeconds(4);
+
+    private async Task SendAsync(IReadOnlyDictionary<string, object?> byCode, long seq, CancellationToken ct)
+    {
         if (IsMatter)
         {
             var command = MatterMapping.CodesToCommand(byCode);
@@ -147,15 +195,19 @@ public sealed class DeviceRuntime : IAsyncDisposable
                 SetError(ex);
                 throw;
             }
-            ApplyValues(byCode, Transport.Matter);
+            Reached(Transport.Matter);
             return;
         }
 
         if (CanUseSmartThings)
         {
             var commands = SmartThingsMapping.CodesToCommands(byCode);
-            if (commands.Count > 0) await _manager.SmartThings!.SendCommandsAsync(Config.SmartThingsId!, commands, ct);
-            ApplyValues(byCode, Transport.SmartThings);
+            if (commands.Count > 0)
+            {
+                await _manager.SmartThings!.SendCommandsAsync(Config.SmartThingsId!, commands, ct);
+                _ = VerifySmartThingsAsync(commands, seq);
+            }
+            Reached(Transport.SmartThings);
             return;
         }
 
@@ -166,7 +218,7 @@ public sealed class DeviceRuntime : IAsyncDisposable
             {
                 var dps = byCode.ToDictionary(kv => CodeToId(kv.Key), kv => kv.Value);
                 await GetLocal().SetDpsAsync(dps, ct);
-                ApplyValues(byCode, Transport.Lan);
+                Reached(Transport.Lan);
                 return;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -177,12 +229,40 @@ public sealed class DeviceRuntime : IAsyncDisposable
         if (CanUseCloud)
         {
             await _manager.Cloud!.SendPropertiesAsync(Id, byCode, ct);
-            ApplyValues(byCode, Transport.Cloud);
+            Reached(Transport.Cloud);
             return;
         }
         SetError(lanError ?? new InvalidOperationException("Device not reachable."));
         throw lanError ?? new InvalidOperationException($"{Config.Name}: not reachable over LAN or cloud.");
     }
+
+    /// <summary>
+    /// SmartThings acknowledges a command when its cloud accepts it, not when the device applied it, and
+    /// a quick series of changes can lose one on the way. Once the changes have settled, read what the
+    /// device reports and resend power / brightness once if they did not take.
+    /// </summary>
+    private async Task VerifySmartThingsAsync(System.Text.Json.Nodes.JsonArray commands, long seq)
+    {
+        try
+        {
+            await Task.Delay(VerifyAfter);
+            if (Interlocked.Read(ref _writeSeq) != seq) return; // a newer change verifies itself
+            var st = _manager.SmartThings;
+            if (st == null) return;
+            var main = await st.GetStatusAsync(Config.SmartThingsId!);
+            var missing = SmartThingsMapping.NotApplied(commands, main);
+            if (missing.Count == 0 || Interlocked.Read(ref _writeSeq) != seq) return;
+            await st.SendCommandsAsync(Config.SmartThingsId!, missing);
+            Resent?.Invoke(this, missing.Count);
+        }
+        catch (Exception)
+        {
+            // best effort: the next refresh shows the real state
+        }
+    }
+
+    /// <summary>Raised when a SmartThings change had not reached the device and was sent again.</summary>
+    public event Action<DeviceRuntime, int>? Resent;
 
     public Task SetAsync(string code, object? value, CancellationToken ct = default) =>
         SetAsync(new Dictionary<string, object?> { [code] = value }, ct);
@@ -375,11 +455,70 @@ public sealed class DeviceRuntime : IAsyncDisposable
         ApplyValues(values, Transport.Cloud);
     }
 
-    private void ApplyValues(IReadOnlyDictionary<string, object?> values, Transport t)
+    private long BeginWrite(IReadOnlyDictionary<string, object?> values, TimeSpan hold)
+    {
+        var until = Environment.TickCount64 + (long)hold.TotalMilliseconds;
+        lock (_gate)
+        {
+            foreach (var (k, v) in values)
+            {
+                _state[k] = v;
+                _pending[k] = (v, until);
+            }
+        }
+        Changed?.Invoke(this);
+        return Interlocked.Increment(ref _writeSeq);
+    }
+
+    /// <summary>The send failed: stop holding these values so the next report shows the real state.</summary>
+    private void EndWriteFailed(IReadOnlyDictionary<string, object?> values)
     {
         lock (_gate)
         {
-            foreach (var (k, v) in values) _state[k] = v;
+            foreach (var (k, v) in values)
+                if (_pending.TryGetValue(k, out var p) && SameValue(p.Value, v)) _pending.Remove(k);
+        }
+    }
+
+    private void Reached(Transport t)
+    {
+        LastTransport = t;
+        Online = true;
+        LastError = null;
+        Changed?.Invoke(this);
+    }
+
+    internal static bool SameValue(object? a, object? b)
+    {
+        if (Equals(a, b)) return true;
+        if (a is string sa && b is string sb) return string.Equals(sa, sb, StringComparison.OrdinalIgnoreCase);
+        if (a is null || b is null || a is bool || b is bool || a is string || b is string) return false;
+        try
+        {
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            return Convert.ToDouble(a, inv) == Convert.ToDouble(b, inv);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Applies values reported by the device or cloud; values this app just sent still win for a moment.</summary>
+    private void ApplyValues(IReadOnlyDictionary<string, object?> values, Transport t)
+    {
+        var now = Environment.TickCount64;
+        lock (_gate)
+        {
+            foreach (var (k, v) in values)
+            {
+                if (_pending.TryGetValue(k, out var p))
+                {
+                    if (SameValue(p.Value, v) || now >= p.Until) _pending.Remove(k); // confirmed, or held long enough
+                    else continue;                                                // stale: keep what was sent
+                }
+                _state[k] = v;
+            }
         }
         LastTransport = t;
         Online = true;

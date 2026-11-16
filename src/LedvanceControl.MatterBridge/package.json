@@ -9,6 +9,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@matter/general": "0.18.0",
     "@matter/main": "0.18.0",
     "@matter/nodejs": "0.18.0",
     "@project-chip/matter.js": "0.18.0"

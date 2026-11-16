@@ -32,7 +32,11 @@ public sealed class DeviceConfig
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public string? LocalKey { get; set; }
+    /// <summary>For sorting the masked key column by "has a key", without ordering by the secret itself.</summary>
+    [JsonIgnore] public bool HasLocalKey => !string.IsNullOrEmpty(LocalKey);
     public string? Ip { get; set; }
+    /// <summary>Numeric sort key for the IP column.</summary>
+    [JsonIgnore] public string IpSortKey => SortKeys.Ip(Ip);
     public string Version { get; set; } = "3.3";
     public string? Category { get; set; }
     public string? ProductId { get; set; }
@@ -153,6 +157,11 @@ public sealed class AppConfig
     public bool StartMinimized { get; set; } = true;
     /// <summary>Closing the window hides to the tray instead of exiting.</summary>
     public bool CloseToTray { get; set; } = true;
+    /// <summary>
+    /// Base64 AES-256 key that encrypts the Matter controller's storage (fabric keys, certificates,
+    /// paired nodes). Stored protected like every other secret (see ConfigStore).
+    /// </summary>
+    public string? MatterStorageKey { get; set; }
     public CloudSettings Cloud { get; set; } = new();
     public SmartThingsSettings SmartThings { get; set; } = new();
     /// <summary>Houses (homes). Every device, room and group belongs to exactly one; there is always at least one.</summary>

@@ -43,34 +43,18 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         Manager.ListChanged += () => System.Windows.Application.Current.Dispatcher.BeginInvoke(OnListChanged);
         NavigateCommand = new RelayCommand(p => Page = (string)p!);
         ToggleThemeCommand = new RelayCommand(() => IsDarkTheme = !IsDarkTheme);
-        RefreshAllCommand = new AsyncCommand(RefreshAllAsync);
+        RefreshAllCommand = new AsyncCommand(RefreshAllAsync, _ => !IsRefreshing);
         AllOffCommand = new AsyncCommand(async () => Status.Errors($"All off in {HomeName}",
             await Manager.ForEachAsync(Manager.DevicesInHouse(Manager.CurrentHouse.Id).Where(d => d.PowerCode != null), d => d.SetPowerAsync(false))));
     }
 
-    /// <summary>Houses for the sidebar switcher.</summary>
-    public ObservableCollection<HouseConfig> Houses { get; } = [];
-
-    /// <summary>The selected house; switching it re-scopes the Devices, Rooms and Groups pages.</summary>
-    public string CurrentHouseId
-    {
-        get => Manager.CurrentHouse.Id;
-        set
-        {
-            if (value == null || value == Manager.CurrentHouse.Id) return;
-            Manager.SetCurrentHouse(value); // ListChanged → OnListChanged re-scopes the pages
-        }
-    }
+    /// <summary>The house picker at the top of the sidebar (switch + manage houses).</summary>
+    public HousePickerViewModel HousePicker { get; private set; } = null!;
 
     private void ReloadHouses()
     {
-        var names = Manager.Houses.Select(h => (h.Id, h.Name)).ToList();
-        if (!names.SequenceEqual(Houses.Select(h => (h.Id, h.Name))))
-        {
-            Houses.Clear();
-            foreach (var h in Manager.Houses) Houses.Add(h);
-        }
-        OnPropertyChanged(nameof(CurrentHouseId));
+        HousePicker ??= new HousePickerViewModel(Manager);
+        HousePicker.Reload();
         OnPropertyChanged(nameof(HomeName));
         OnPropertyChanged(nameof(HasSeveralHouses));
     }
@@ -84,7 +68,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public RoomsViewModel Rooms { get; }
     public GroupsViewModel Groups { get; }
 
-    /// <summary>Name of the selected house (as the SMART+ app shows it on top); managed on the Rooms page.</summary>
+    /// <summary>Name of the selected house (as the SMART+ app shows it on top); managed in the house picker.</summary>
     public string HomeName => Manager.CurrentHouse.Name;
     public ScenesViewModel Scenes { get; }
     public SchedulesViewModel Schedules { get; }
@@ -165,12 +149,65 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public string StatusText { get => _status; private set => Set(ref _status, value); }
     public bool StatusIsError { get => _statusIsError; private set => Set(ref _statusIsError, value); }
 
-    public async Task RefreshAllAsync()
+    // ---------------------------------------------------------------- refresh
+
+    private Task? _refresh;
+    private bool _isRefreshing;
+    private DateTime _lastRefreshStart = DateTime.MinValue;
+    private int _refreshDone;
+    private int _refreshTotal;
+
+    /// <summary>True while a refresh of all devices runs (spinners on the Refresh button and status bar).</summary>
+    public bool IsRefreshing => _isRefreshing;
+    /// <summary>"3/5" — devices answered so far.</summary>
+    public string RefreshProgress => $"{_refreshDone}/{_refreshTotal}";
+
+    /// <summary>
+    /// Asks every device for its current state, all in parallel. If a refresh is already running, the
+    /// caller simply waits for that one instead of starting a second.
+    /// </summary>
+    public Task RefreshAllAsync() => IsRefreshing ? _refresh! : _refresh = RunRefreshAsync();
+
+    /// <summary>
+    /// Refreshes unless one is running or the last one started less than <paramref name="maxAge"/> ago —
+    /// used when the window is shown again from the tray or restored.
+    /// </summary>
+    public void RefreshIfStale(TimeSpan maxAge)
     {
+        if (IsRefreshing || DateTime.Now - _lastRefreshStart < maxAge) return;
+        _ = RefreshAllAsync();
+    }
+
+    private async Task RunRefreshAsync()
+    {
+        var devices = Manager.Devices.ToList();
+        _isRefreshing = true;
+        _lastRefreshStart = DateTime.Now;
+        _refreshDone = 0;
+        _refreshTotal = devices.Count;
+        OnPropertyChanged(nameof(IsRefreshing));
+        OnPropertyChanged(nameof(RefreshProgress));
         Status.Info("Refreshing devices…");
-        var errors = await Manager.ForEachAsync(Manager.Devices, d => d.RefreshAsync());
-        var offline = Manager.Devices.Count(d => !d.Online);
-        Status.Info($"Refreshed {Manager.Devices.Count()} device(s), {offline} offline" + (errors.Count > 0 ? " – " + string.Join("; ", errors) : ""));
+        try
+        {
+            var errors = await Manager.ForEachAsync(devices, async d =>
+            {
+                try { await d.RefreshAsync(); }
+                finally
+                {
+                    Interlocked.Increment(ref _refreshDone);
+                    System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => OnPropertyChanged(nameof(RefreshProgress)));
+                }
+            });
+            var offline = devices.Count(d => !d.Online);
+            Status.Info($"Refreshed {devices.Count} device(s), {offline} offline" + (errors.Count > 0 ? " – " + string.Join("; ", errors) : ""));
+        }
+        finally
+        {
+            _isRefreshing = false;
+            OnPropertyChanged(nameof(IsRefreshing));
+            CommandManager.InvalidateRequerySuggested();
+        }
     }
 
     private void OnListChanged()

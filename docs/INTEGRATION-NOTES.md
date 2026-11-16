@@ -99,11 +99,53 @@ Bulbs that use **Thread** instead of Wi-Fi can't be reached from a PC (no Thread
   - Manually added devices: free.
   - A moved device leaves its room (rooms belong to a house) and any group of its old house.
 - **New devices** (Matter pairing, manual add, tinytuya import) join the house selected in the sidebar.
-- **Scope:** the house switcher scopes the Devices, Rooms and Groups pages. Scenes and Schedules stay global and show each device's house.
+- **Scope:** the house picker at the top left scopes the Devices, Rooms and Groups pages. Scenes and Schedules stay global and show each device's house.
+- **Managing houses** happens in that picker ("Manage houses…"), like the SMART+ home picker. Adding a house keeps the current one selected.
 - **Migration:** configs from earlier versions (one house name + a flat room list) become a single house that keeps the name, rooms and every device.
 
-## 6. Re-checking these findings
+## 6. Protecting secrets on disk (Windows and Linux)
 
-- Bulb attributes and labels: the Matter bridge has an `inspect` command (`{"cmd":"inspect","nodeId":"1"}` on its stdin) that dumps BasicInformation and every label list per endpoint.
+What an attacker who can read the user's files would find, and how it is protected:
+
+| Data | Where | Protection |
+|---|---|---|
+| SmartThings client secret + refresh token, Tuya secret, device local keys | `config.json` | Windows: DPAPI. Linux: AES-256-GCM with a master key from the desktop keyring or `systemd-creds --user`. Never plain text: without a secure store they are not saved. |
+| Matter storage key (32 random bytes) | `config.json` | same as above |
+| Matter fabric (root key pair, operational key + IPK, certificates, paired nodes) | `matter/` | every value AES-256-GCM-encrypted by the bridge, bound to its storage name; plain values from older versions are encrypted on the first start |
+| The whole data folder | `%APPDATA%\IoTSmartControl` / `~/.config/IoTSmartControl` | owner-only: Windows ACL (user + SYSTEM, no inherited entries); Linux `0700` folders, `0600` files, bridge runs with umask 077 |
+
+Findings that shaped this:
+- **DPAPI and the desktop keyring stop other accounts and offline disk theft, not malware running as the user.** Such malware can ask DPAPI or an unlocked keyring to decrypt. Encryption still removes the plain-text files that any process (or a backup, sync folder or screen share) could pick up, and owner-only permissions keep other local accounts out: on the test PC a `CodexSandboxUsers` group had inherited read access to the data folder.
+- **On Linux the previous code wrote every secret in plain text**, readable by all local users (umask 022), because DPAPI only exists on Windows. Fixed by the cross-platform secret store above.
+- **A keyring that D-Bus starts on demand answers lookups but may need an unlock prompt to store.** Without a display (SSH, server, WSL without WSLg) that prompt never appears. The app therefore only uses a store once it has actually produced the master key (with a 5 s limit when there is no display) and otherwise falls back to `systemd-creds`.
+- **`systemd-creds --user` needs systemd 256+** (Fedora 41+; verified on Fedora 45 with systemd 262). Ubuntu 24.04 (systemd 255) doesn't have it.
+- **The Matter storage key travels over stdin**, not the command line or environment, which other processes can read (`/proc/<pid>/cmdline`, `/proc/<pid>/environ`).
+- **Only folders the app owns are locked down.** A config placed in an existing folder (e.g. via `LEDVANCE_CONFIG`) only gets the file itself restricted.
+
+Verified with automated tests on Windows 11 and on Fedora 45 (WSL), including the real `systemd-creds --user`, a
+real gnome-keyring in a private D-Bus session, and the real Matter bridge (encrypted fabric, reopened with its key,
+rejected with a wrong one, legacy plain files encrypted, files `0600`).
+
+## 7. Latency: where the time goes
+
+Measured in November 2026 on three SMART MAT bulbs (A100 E27 ×2, P40 E14, fw 1.1.0) and two SmartThings-linked LEDVANCE Wi-Fi devices, with every change read back from the device.
+
+| Step | Time |
+|---|---|
+| Matter command, session open (even after 3 min idle) | 30–200 ms until the bulb acknowledges |
+| First Matter connection after the bridge starts | 0.4–4 s per bulb (CASE handshake on the bulb), ~2.7 s bridge start-up |
+| SmartThings command | 350–950 ms until the API accepts it, plus the SmartThings → LEDVANCE cloud hop (not measurable from the PC) |
+| SmartThings status after a command | still shows the old value for 0.5–3 s |
+
+Findings that shaped the app:
+
+- **LEDVANCE Matter bulbs mishandle `transitionTime`.** With `transitionTime = 0` the level is reached in ~0.2–0.35 s. With **any** other value, even 1 (0.1 s), or with none, the bulb ramps linearly over **~4.5–5 s**. This looked like a 2–3 s delay before anything happened. The app now always sends 0.
+- **The bulbs expose no `OnOffTransitionTime` / `OnTransitionTime` / `OffTransitionTime`** attributes, but support the OnOff *Lighting* feature: `OffWithEffect` (DelayedAllOff, *no fade*) switches off at once, and `CurrentLevel` is kept while off, so *move to the current level with on/off, in 0 s* switches on at once at the same brightness.
+- **Brightness read back mid-ramp looks wrong.** While a slow ramp runs, `CurrentLevel` reports intermediate values (a 30 % white read back as ~70 % after 0.6 s). With zero transitions, reads are exact.
+- **Cloud status lags.** A refresh shortly after a SmartThings command returns the old value. Applying it flipped switches and sliders back, so a change looked ignored. The app now holds a value it just sent against older reports (5 s for cloud devices), and 4 s after the last change re-reads the status and resends power / brightness once if they didn't take.
+
+## 8. Re-checking these findings
+
+- Bulb attributes and labels: the Matter bridge has an `inspect` command (`{"cmd":"inspect","nodeId":"1"}` on its stdin) that dumps BasicInformation, every label list per endpoint, the transition-time attributes and the OnOff *Lighting* feature.
 - Matter adverts on the LAN: an mDNS query for `_matter._tcp.local` (paired) and `_matterc._udp.local` (pairing window open).
 - Bridge debug log: run `node bridge.mjs --storage <dir> --verbose debug` to see every Matter message, including the commissioning steps.

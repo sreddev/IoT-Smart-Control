@@ -1,3 +1,37 @@
+# Packaging
+
+Two Windows packages are built from the same self-contained publish (no .NET or Node.js needed on the target):
+
+| Package | Built by | Notes |
+|---|---|---|
+| `out/IoTSmartControl-<ver>-Setup-x64.exe` | `installer/IoTSmartControl.iss` (Inno Setup 6) | Recommended download. Upgrade / clean install, uninstall keeps or deletes settings. |
+| `out/IoTSmartControl_<ver>.0_x64.msix` (+ `IoTSmartControl-Test.cer`) | `build-msix.ps1` | Sideload (signed with a test certificate) or Microsoft Store (unsigned upload). |
+
+## Building a release
+
+```powershell
+pwsh packaging/build-release.ps1      # tests → publish → bundle Node.js → Setup .exe → signed .msix → SHA256SUMS
+pwsh packaging/build-release.ps1 -SkipTests -NoMsix   # quick installer-only build
+```
+
+Needs the .NET 10 SDK, Node.js + npm (builds the Matter bridge and is bundled), the Windows SDK (`makeappx`,
+`signtool`) and **Inno Setup 6** (`winget install JRSoftware.InnoSetup`). The version comes from
+`src/LedvanceControl.App/LedvanceControl.App.csproj` and must match `AppxManifest.xml` (the script checks).
+Node.js is redistributed with its license: download the `LICENSE` for the bundled version from
+`https://github.com/nodejs/node/blob/v<version>/LICENSE` into `packaging/obj/node/LICENSE` (or pass
+`-NodeLicense`).
+
+## The `.exe` installer
+
+| Behaviour | Detail |
+|---|---|
+| Install scope | Current user by default (no admin prompt, `%LOCALAPPDATA%\Programs\IoT Smart Control`); "all users" is offered and asks for admin rights. |
+| Upgrade | When a previous version or its settings exist, a page offers **Upgrade and keep my settings** (default) or **Clean install**, which deletes the old program files, `%APPDATA%\IoTSmartControl` (config, protected keys, Matter storage, safety copies), the pre-rename `%APPDATA%\LedvanceControl` and the autostart entry before installing. |
+| Running app | Closed (with its Matter bridge) before files are replaced. |
+| Uninstall | After the usual confirmation it asks **Keep my settings** (default) or **Delete my settings**. The autostart entry is always removed. |
+| Unattended | `Setup.exe /VERYSILENT [/CURRENTUSER] [/DIR=…] [/CLEANINSTALL]` · `unins000.exe /VERYSILENT [/DELETEDATA]` |
+| Signing | Not code-signed: SmartScreen shows *More info → Run anyway* until a code-signing certificate is used. |
+
 # MSIX packaging
 
 Packages **IoT Smart Control** as an `.msix` for the Microsoft Store (or sideloading).
@@ -35,11 +69,11 @@ The app is published **self-contained**, so the target PC needs no .NET runtime.
 
 1. Trust the exported `packaging/out/IoTSmartControl-Test.cer` into
    **Local Machine → Trusted People** (self-signed certs aren't trusted by default).
-2. `Add-AppxPackage packaging/out/IoTSmartControl_1.0.0.0_x64.msix`
+2. `Add-AppxPackage packaging/out/IoTSmartControl_2.5.0.0_x64.msix`
 
 ## How this meets Microsoft Store requirements
 
-- **Package identity** — `Name`, `Publisher`, 4-part `Version` with a **0 revision** (`1.0.0.0`).
+- **Package identity** — `Name`, `Publisher`, 4-part `Version` with a **0 revision** (`2.5.0.0`).
 - **Architecture** — `x64` (and `arm64` via `-Runtime`). Submit each as a package in one submission.
 - **Target platform** — `Windows.Desktop`, `MinVersion 10.0.17763.0` (1809).
 - **Visual assets** — Square 44/71/150/310, Wide 310×150, Store logo (50), splash, and

@@ -18,7 +18,17 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Content="All off" Command="{Binding AllOffCommand}" />
-                    <Button Content="Refresh" Command="{Binding RefreshAllCommand}" Margin="0" />
+                    <Button Command="{Binding RefreshAllCommand}" Margin="0" ToolTip="Ask every device for its current state (also done automatically when the app opens)">
+                        <Grid>
+                            <TextBlock Text="Refresh" Visibility="{Binding IsRefreshing, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding IsRefreshing, Converter={StaticResource BoolToVis}}">
+                                <views:Spinner Margin="0,0,8,0" VerticalAlignment="Center" />
+                                <TextBlock>
+                                    <Run Text="Refreshing" /> <Run Text="{Binding RefreshProgress, Mode=OneWay}" />
+                                </TextBlock>
+                            </StackPanel>
+                        </Grid>
+                    </Button>
                 </StackPanel>
             </DockPanel>
             <TextBlock DockPanel.Dock="Top" Style="{StaticResource Muted}" Margin="0,0,0,10"
@@ -57,18 +67,26 @@
                             </TextBlock>
                             <StackPanel Grid.Column="1">
                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" FontSize="12">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsOnline}" Value="True">
-                                                    <Setter Property="Foreground" Value="{DynamicResource Ok}" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
+                                <DockPanel>
+                                    <views:Spinner DockPanel.Dock="Left" Width="12" Height="12" Margin="0,1,6,0" VerticalAlignment="Center"
+                                                   Visibility="{Binding IsRefreshing, Converter={StaticResource BoolToVis}}" />
+                                    <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" FontSize="12">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsOnline}" Value="True">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Ok}" />
+                                                    </DataTrigger>
+                                                    <!-- while it is being asked, the old online/offline colour would be misleading -->
+                                                    <DataTrigger Binding="{Binding IsRefreshing}" Value="True">
+                                                        <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </DockPanel>
                             </StackPanel>
                             <CheckBox Grid.Column="2" Style="{StaticResource Switch}" IsChecked="{Binding IsOn}" VerticalAlignment="Center"
                                       Visibility="{Binding HasPower, Converter={StaticResource BoolToVis}}" />
@@ -124,28 +142,27 @@
                                 </ComboBox>
                             </StackPanel>
                         </Grid>
-                        <!-- House: move rules depend on where the device comes from -->
+                        <!-- House: every house is listed, the device's own selected; move rules depend on the device's source -->
                         <Border BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Margin="0,14,0,0" Padding="0,10,0,0">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource Label}">
-                                    <Run Text="House:" /> <Run Text="{Binding HouseName, Mode=OneWay}" FontWeight="SemiBold" />
-                                </TextBlock>
-                                <TextBlock Text="{Binding MoveBlockedReason}" Style="{StaticResource Muted}" TextWrapping="Wrap"
+                                <TextBlock Text="House" Style="{StaticResource Label}" Margin="0,0,0,4" />
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Content="Move" Command="{Binding MoveHouseCommand}" Margin="8,0,0,0"
+                                            Visibility="{Binding CanMoveHouse, Converter={StaticResource BoolToVis}}"
+                                            ToolTip="Move the device to the house selected on the left" />
+                                    <ComboBox ItemsSource="{Binding AllHouses}" SelectedValuePath="Id" SelectedValue="{Binding MoveTargetHouseId}"
+                                              IsEnabled="{Binding CanMoveHouse}" MaxWidth="320" MinWidth="200" HorizontalAlignment="Left"
+                                              AutomationProperties.Name="House">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate><TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" /></DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </DockPanel>
+                                <TextBlock Text="{Binding MoveBlockedReason}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,0"
                                            Visibility="{Binding MoveBlockedReason, Converter={StaticResource NullToVis}}" />
-                                <StackPanel Visibility="{Binding CanMoveHouse, Converter={StaticResource BoolToVis}}">
-                                    <DockPanel Margin="0,4,0,0">
-                                        <Button DockPanel.Dock="Right" Content="Move to house" Command="{Binding MoveHouseCommand}" Margin="8,0,0,0" />
-                                        <ComboBox ItemsSource="{Binding OtherHouses}" SelectedValuePath="Id"
-                                                  SelectedValue="{Binding MoveTargetHouseId}" MaxWidth="320" HorizontalAlignment="Left" MinWidth="200">
-                                            <ComboBox.ItemTemplate>
-                            <DataTemplate><TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" /></DataTemplate>
-                        </ComboBox.ItemTemplate>
-                                        </ComboBox>
-                                    </DockPanel>
-                                    <CheckBox IsChecked="{Binding MoveConfirmed}" Margin="0,8,0,0"
-                                              Visibility="{Binding MoveNeedsConfirmation, Converter={StaticResource BoolToVis}}"
-                                              Content="I already moved this bulb to that house in the LEDVANCE SMART+ app." />
-                                </StackPanel>
+                                <CheckBox IsChecked="{Binding MoveConfirmed}" Margin="0,8,0,0"
+                                          Visibility="{Binding ShowMoveConfirmation, Converter={StaticResource BoolToVis}}"
+                                          Content="I already moved this bulb to that house in the LEDVANCE SMART+ app." />
                             </StackPanel>
                         </Border>
                         <StackPanel Orientation="Horizontal" Margin="0,12,0,0">

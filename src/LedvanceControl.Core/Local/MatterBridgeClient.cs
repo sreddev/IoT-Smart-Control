@@ -9,6 +9,9 @@ namespace LedvanceControl.Core.Local;
 /// <summary>Where to find the Matter bridge (a Node.js script) and where it keeps its fabric.</summary>
 public sealed record MatterBridgeOptions(string NodeExecutable, string ScriptPath, string StorageDirectory)
 {
+    /// <summary>Base64 AES-256 key that encrypts the bridge's storage; sent over stdin when it starts.</summary>
+    public string? StorageKey { get; init; }
+
     /// <summary>
     /// Finds Node.js and the bridge script. Node is taken from LEDVANCE_NODE, a copy bundled under
     /// <c>matter-bridge\node\node.exe</c>, or the PATH. Returns null when either piece is missing.
@@ -88,6 +91,13 @@ public sealed class MatterCommissionableDevice
     public int? ProductId { get; set; }
     public string? DeviceName { get; set; }
     public List<string> Addresses { get; set; } = [];
+
+    /// <summary>"4489 / 2756" — one sortable column in the UI.</summary>
+    public string VendorProduct => $"{VendorId} / {ProductId}";
+    /// <summary>First advertised address (IPv4 first), for display and sorting.</summary>
+    public string? FirstAddress => Addresses.FirstOrDefault(a => a.Contains('.')) ?? Addresses.FirstOrDefault();
+    /// <summary>Numeric sort key for the address column.</summary>
+    public string AddressSortKey => Model.SortKeys.Ip(FirstAddress);
 }
 
 /// <summary>
@@ -216,7 +226,9 @@ public sealed class MatterBridgeClient : IAsyncDisposable
         {
             if (!IsRunning)
             {
-                Directory.CreateDirectory(_options.StorageDirectory);
+                if (string.IsNullOrEmpty(_options.StorageKey))
+                    throw new MatterException("The Matter bridge needs a storage key (no secure secret store?).");
+                Security.FilePermissions.SecureDirectory(_options.StorageDirectory);
                 var psi = new ProcessStartInfo(_options.NodeExecutable)
                 {
                     UseShellExecute = false,
@@ -249,6 +261,12 @@ public sealed class MatterBridgeClient : IAsyncDisposable
                 p.BeginErrorReadLine();
                 _process = p;
                 _ = Task.Run(() => ReadLoopAsync(p));
+
+                // First line: the storage key (over stdin, never on the command line or in the environment,
+                // where other processes could read it). The bridge refuses to start without it.
+                var init = new JsonObject { ["cmd"] = "init", ["storageKey"] = _options.StorageKey };
+                await p.StandardInput.WriteLineAsync(init.ToJsonString());
+                await p.StandardInput.FlushAsync(ct);
             }
 
             using var startCts = CancellationTokenSource.CreateLinkedTokenSource(ct);

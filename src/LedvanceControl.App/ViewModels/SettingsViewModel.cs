@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows.Input;
 using LedvanceControl.App.Mvvm;
 using LedvanceControl.Core.Cloud;
@@ -107,6 +108,106 @@ public sealed class SettingsViewModel : ObservableObject
     public ICommand FindMatterCommand { get; }
 
     public string ConfigPath => _main.Manager.ConfigPath;
+    /// <summary>Where secrets are kept, e.g. "Windows DPAPI" or "the desktop keyring (Secret Service)".</summary>
+    public string SecretProtection => _main.Manager.SecretProtection;
+
+    // ---------------------------------------------------------------- about / support (as in AVR Control Center)
+
+    /// <summary>PayPal donate page: €5 suggested, "Buy me a coffee ☕" (the ☕ percent-encoded).</summary>
+    public const string PayPalDonateUrl =
+        "https://www.paypal.com/donate/?business=M3KKGFD9NCZH8&amount=5&no_recurring=0" +
+        "&item_name=Buy+me+a+coffee+%E2%98%95+Keeps+my+free+apps+alive+and+updated.&currency_code=EUR";
+    public const string RevolutUrl = "https://revolut.me/sreddev";
+    public const string TelegramUrl = "https://t.me/sreddev";
+
+    private bool _isSupportOpen;
+
+    /// <summary>"v2.5.0 · .NET 10 · WPF", read from the assembly.</summary>
+    public string VersionText
+    {
+        get
+        {
+            var v = typeof(SettingsViewModel).Assembly.GetName().Version;
+            return $"v{v?.Major ?? 1}.{v?.Minor ?? 0}.{v?.Build ?? 0} · .NET {Environment.Version.Major} · WPF";
+        }
+    }
+
+    /// <summary>The "Support development" menu (PayPal / Revolut) is open.</summary>
+    public bool IsSupportOpen { get => _isSupportOpen; set => Set(ref _isSupportOpen, value); }
+    public ICommand ToggleSupportCommand => _toggleSupport ??= new RelayCommand(() => IsSupportOpen = !IsSupportOpen);
+    /// <summary>Opens the URL given as parameter in the browser (and closes the support menu).</summary>
+    public ICommand OpenUrlCommand => _openUrl ??= new RelayCommand(p =>
+    {
+        IsSupportOpen = false;
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo((string)p!) { UseShellExecute = true }); }
+        catch (Exception ex) { Status.Error($"Couldn't open the browser: {ex.Message}"); }
+    });
+    private ICommand? _toggleSupport, _openUrl;
+
+    // ---------------------------------------------------------------- Backup & restore (menu in App settings)
+
+    private bool _isBackupOpen;
+    private ICommand? _toggleBackup, _exportBackup, _importBackup, _undoImport, _openBackups;
+
+    /// <summary>The "Backup" menu (export / import / undo / folder) is open.</summary>
+    public bool IsBackupOpen { get => _isBackupOpen; set { if (Set(ref _isBackupOpen, value)) OnPropertyChanged(nameof(CanUndoImport)); } }
+    public ICommand ToggleBackupCommand => _toggleBackup ??= new RelayCommand(() => IsBackupOpen = !IsBackupOpen);
+
+    /// <summary>An automatic pre-import copy exists, so the last import can be undone.</summary>
+    public bool CanUndoImport => Core.Backup.SettingsBackup.SafetyCopies(_main.Manager.Store).Count > 0;
+
+    /// <summary>Opens the export dialog (choose parts, set a password, pick the file).</summary>
+    public ICommand ExportBackupCommand => _exportBackup ??= new RelayCommand(() =>
+    {
+        IsBackupOpen = false;
+        new Views.ExportBackupWindow(_main.Manager) { Owner = System.Windows.Application.Current.MainWindow }.ShowDialog();
+    });
+
+    /// <summary>Picks a backup file and opens the import preview for it.</summary>
+    public ICommand ImportBackupCommand => _importBackup ??= new RelayCommand(() =>
+    {
+        IsBackupOpen = false;
+        var dlg = new OpenFileDialog
+        {
+            Title = "Import settings",
+            Filter = $"IoT Smart Control backup (*{Core.Backup.SettingsBackup.FileExtension})|*{Core.Backup.SettingsBackup.FileExtension}|All files (*.*)|*.*",
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        };
+        if (dlg.ShowDialog() != true) return;
+        Core.Backup.BackupFile file;
+        try
+        {
+            file = Core.Backup.SettingsBackup.Read(File.ReadAllBytes(dlg.FileName));
+        }
+        catch (Exception ex) when (ex is Core.Backup.BackupException or IOException or UnauthorizedAccessException)
+        {
+            Status.Error($"Import: {ex.Message}");
+            return;
+        }
+        new Views.ImportBackupWindow(_main.Manager, file, dlg.FileName) { Owner = System.Windows.Application.Current.MainWindow }.ShowDialog();
+    });
+
+    /// <summary>Restores the settings saved automatically before the last import (the app restarts).</summary>
+    public ICommand UndoImportCommand => _undoImport ??= new RelayCommand(() =>
+    {
+        IsBackupOpen = false;
+        var store = _main.Manager.Store;
+        var copy = Core.Backup.SettingsBackup.SafetyCopies(store).FirstOrDefault();
+        if (copy == null) return;
+        var when = File.GetLastWriteTime(copy);
+        if (System.Windows.MessageBox.Show($"Go back to the settings saved before the last import ({when:g})?\n\nThe app restarts to apply them.",
+                "Undo last import", System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question) != System.Windows.MessageBoxResult.OK) return;
+        ((MainWindow)System.Windows.Application.Current.MainWindow).RestartAfter(() => Core.Backup.SettingsBackup.RestoreSafetyCopy(store, copy));
+    }, _ => CanUndoImport);
+
+    /// <summary>Opens the folder with the automatic pre-import copies in Explorer.</summary>
+    public ICommand OpenBackupsFolderCommand => _openBackups ??= new RelayCommand(() =>
+    {
+        IsBackupOpen = false;
+        var dir = Core.Backup.SettingsBackup.SafetyDirectory(_main.Manager.Store);
+        Directory.CreateDirectory(dir);
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{dir}\"") { UseShellExecute = true });
+    });
 
     /// <summary>Name/room per device as last loaded, to detect edits made in the table.</summary>
     private Dictionary<string, (string Name, string? Room)> _loaded = [];
@@ -263,7 +364,8 @@ public sealed class SettingsViewModel : ObservableObject
 
     private string MatterIdleStatus()
     {
-        if (!MatterAvailable) return "Node.js not found. Install Node.js LTS (nodejs.org) and restart the app.";
+        if (!MatterAvailable)
+            return _main.Manager.MatterUnavailableReason ?? "Node.js not found. Install Node.js LTS (nodejs.org) and restart the app.";
         var n = _main.Manager.Config.Devices.Count(d => d.MatterNodeId != null);
         return n == 0 ? "Ready · no Matter devices paired yet" : $"Ready · {n} Matter device(s) paired";
     }

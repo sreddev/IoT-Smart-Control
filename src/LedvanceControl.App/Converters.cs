@@ -17,6 +17,14 @@ public sealed class BoolToVisibilityConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object? parameter, CultureInfo culture) => throw new NotSupportedException();
 }
 
+/// <summary>Negates a bool (e.g. a popup's toggle button is not hit-testable while the popup is open,
+/// so clicking it closes the popup instead of immediately reopening it).</summary>
+public sealed class InverseBoolConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object? parameter, CultureInfo culture) => value is not true;
+    public object ConvertBack(object value, Type targetType, object? parameter, CultureInfo culture) => value is not true;
+}
+
 /// <summary>Visible when the bound value equals the ConverterParameter (string compare).</summary>
 public sealed class EqualsToVisibilityConverter : IValueConverter
 {

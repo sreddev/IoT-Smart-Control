@@ -27,9 +27,9 @@ public static class HelpTopics
                 "Flip the switch on a card — or in the panel header — to turn a device on or off. 'All off' at the top turns everything off at once.",
                 "For lights, use the panel tabs: White (brightness + colour temperature), Colour (hue / saturation / brightness plus quick colours) and Scenes (the 8 built-in Tuya light effects).",
                 "For energy-monitoring plugs, an Energy monitor panel shows live power draw (W), voltage (V), current (A) and total energy (kWh). It appears only when the device actually reports metering.",
-                "Refresh re-reads the current state. Diagnostics runs connectivity checks and reports exactly how the device is reached.",
+                "Devices refresh automatically when the app starts and whenever you reopen its window (if the last refresh is more than 30 seconds old); a spinner on each card shows which devices are still answering. Refresh re-reads everything on demand. Diagnostics runs connectivity checks and reports exactly how the device is reached.",
                 "Edit renames the device or moves it to another room of its house: pick a room or type a new one (leave it empty for 'No room'), then Save or press Enter. Your name and room are kept even when SmartThings / Tuya / Matter devices are synchronised again. The same card shows the device's house and, where allowed, moves it to another house.",
-                "The House picker in the sidebar chooses which house the Devices, Rooms and Groups pages show; 'All off' switches off the selected house.",
+                "The house picker at the top left chooses which house the Devices, Rooms and Groups pages show (and manages houses); 'All off' switches off the selected house.",
                 "The Data points card lists every raw function the device exposes; read-only values such as voltage are shown on the right.",
             ],
             Tip = "Control prefers your local network (LAN) whenever an IP address and 16-character local key are known, and falls back to the cloud otherwise.",
@@ -96,10 +96,10 @@ public static class HelpTopics
         ["Rooms"] = new()
         {
             Title = "Houses and rooms",
-            Intro = "Your houses and their rooms, like the home screen of the LEDVANCE SMART+ app. Every device belongs to one house and one of its rooms. Pick the house in the sidebar; Devices, Rooms and Groups then show that house.",
+            Intro = "Your houses and their rooms, like the home screen of the LEDVANCE SMART+ app. Every device belongs to one house and one of its rooms. The house picker at the top left switches houses; Devices, Rooms and Groups then show that house.",
             Steps =
             [
-                "House — rename the selected house in the box at the top (saved when you leave it). '+ New house' creates one and switches to it; 'Delete house' removes an empty house. Your only house can't be deleted, and a house that still has devices can't be deleted either.",
+                "Houses — open the house picker at the top left and choose 'Manage houses…' to add, rename (type, then Save or Enter) and delete houses. Adding a house keeps you on the house you're viewing; pick the new one from the list to open it. Your only house can't be deleted, and neither can a house that still has devices.",
                 "Houses linked to a SmartThings location or a Tuya home are created and named by the sync; their devices always live there. Your own name for such a house is kept across syncs.",
                 "+ New room adds a room to the selected house; type its name in the Name box on the right. Delete room moves its devices to 'No room'. Two houses can each have a room with the same name.",
                 "Tick devices under 'Devices in this room' to move them here. A device is in one room at a time, so ticking it moves it from its current room (shown in brackets).",
@@ -129,12 +129,15 @@ public static class HelpTopics
         ["Settings.Appearance"] = new()
         {
             Title = "App settings",
-            Intro = "Appearance and start-up/close behaviour for the app.",
+            Intro = "Appearance, start-up/close behaviour, and backing up your settings.",
             Steps =
             [
                 "Theme — toggle between Light and Dark. Dark is the default; the choice applies immediately and is remembered.",
                 "Start minimized — when on, the app launches automatically at Windows sign-in and opens straight into the system tray (default: on).",
                 "Close to tray — when on, closing the window keeps the app running in the tray (so schedules keep firing) instead of exiting; use the tray icon's Exit to quit (default: on).",
+                "Backup ▸ Export settings… — saves houses, devices, groups, scenes, schedules and preferences to one .iscbackup file. Tick 'Keys & credentials' to include local keys and cloud sign-ins: they are then encrypted with a password you choose, which can't be recovered.",
+                "Backup ▸ Import settings… — pick a backup, check what it contains, enter its password and choose Merge (add and update, keep the rest) or Replace (use only what's in the file). The app restarts to apply it. Matter bulbs from another PC need pairing again.",
+                "Backup ▸ Undo last import — your settings are saved automatically before every import; this puts them back (the app restarts). 'Open safety copies folder' shows those copies.",
             ],
         },
 

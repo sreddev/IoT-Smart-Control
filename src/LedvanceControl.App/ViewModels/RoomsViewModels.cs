@@ -98,20 +98,17 @@ public sealed class RoomViewModel : ObservableObject, ILightTarget
     }
 }
 
-/// <summary>The Rooms page: the selected house (rename / add / delete houses) and its rooms.</summary>
+/// <summary>The Rooms page: the rooms of the selected house (houses are managed in the sidebar picker).</summary>
 public sealed class RoomsViewModel : ObservableObject
 {
     private readonly MainViewModel _main;
     private RoomViewModel? _selected;
-    private string _houseName = "";
 
     public RoomsViewModel(MainViewModel main)
     {
         _main = main;
         AddCommand = new RelayCommand(Add);
         DeleteCommand = new RelayCommand(Delete, _ => Selected != null);
-        AddHouseCommand = new RelayCommand(AddHouse);
-        DeleteHouseCommand = new RelayCommand(DeleteHouse);
         Reload();
     }
 
@@ -120,8 +117,6 @@ public sealed class RoomsViewModel : ObservableObject
     public ObservableCollection<RoomViewModel> Rooms { get; } = [];
     public ICommand AddCommand { get; }
     public ICommand DeleteCommand { get; }
-    public ICommand AddHouseCommand { get; }
-    public ICommand DeleteHouseCommand { get; }
 
     public RoomViewModel? Selected
     {
@@ -129,35 +124,8 @@ public sealed class RoomsViewModel : ObservableObject
         set => Set(ref _selected, value);
     }
 
-    /// <summary>Name of the selected house; committed on focus loss.</summary>
-    public string HouseName
-    {
-        get => _houseName;
-        set
-        {
-            if (!Set(ref _houseName, value)) return;
-            var house = Manager.CurrentHouse;
-            if ((value ?? "").Trim() == house.Name) return;
-            try { Manager.RenameHouse(house.Id, value!); Status.Info($"Renamed house to '{value!.Trim()}'"); }
-            catch (Exception ex) { Status.Error(ex); _houseName = house.Name; OnPropertyChanged(); }
-        }
-    }
-
-    public string HouseSourceHint
-    {
-        get
-        {
-            var h = Manager.CurrentHouse;
-            var links = new List<string>();
-            if (h.SmartThingsLocationId != null) links.Add("SmartThings location");
-            if (h.TuyaHomeId != null) links.Add("Tuya home");
-            var source = links.Count == 0 ? "Created in this app." : $"Linked to a {string.Join(" and a ", links)}; its devices always live here.";
-            return source + (h.NameEdited || links.Count == 0 ? "" : " Type to rename it (e.g. as in the LEDVANCE SMART+ app); syncs keep your name.");
-        }
-    }
-
-    public bool CanDeleteHouse => Manager.Houses.Count > 1;
-    public string DeleteHouseTip => CanDeleteHouse ? "Delete this house (it must have no devices)" : "Your only house can't be deleted — rename it instead";
+    /// <summary>Name of the selected house (read-only here).</summary>
+    public string HouseName => Manager.CurrentHouse.Name;
 
     public string UnassignedSummary
     {
@@ -181,9 +149,8 @@ public sealed class RoomsViewModel : ObservableObject
         foreach (var r in Manager.RoomsOf(house.Id)) Rooms.Add(new RoomViewModel(Manager, house.Id, r, houseDevices));
         Selected = Rooms.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.CurrentCultureIgnoreCase))
                    ?? Rooms.FirstOrDefault();
-        _houseName = house.Name;
-        foreach (var p in new[] { nameof(HouseName), nameof(HouseSourceHint), nameof(UnassignedSummary), nameof(CanDeleteHouse), nameof(DeleteHouseTip) })
-            OnPropertyChanged(p);
+        OnPropertyChanged(nameof(HouseName));
+        OnPropertyChanged(nameof(UnassignedSummary));
     }
 
     private void Add()
@@ -210,29 +177,5 @@ public sealed class RoomsViewModel : ObservableObject
         Status.Info($"Deleted room '{name}' from {house.Name}; its devices now have no room");
     }
 
-    private void AddHouse()
-    {
-        var n = 1;
-        string name;
-        do name = n == 1 ? "New house" : $"New house {n}";
-        while (Manager.Houses.Any(h => string.Equals(h.Name, name, StringComparison.CurrentCultureIgnoreCase)) && n++ < 1000);
-        try
-        {
-            var house = Manager.AddHouse(name);
-            Manager.SetCurrentHouse(house.Id);
-            Status.Info($"Created '{name}' and switched to it. Rename it, add rooms, then pair or add its devices.");
-        }
-        catch (Exception ex) { Status.Error(ex); }
-    }
 
-    private void DeleteHouse()
-    {
-        var house = Manager.CurrentHouse;
-        try
-        {
-            Manager.DeleteHouse(house.Id);
-            Status.Info($"Deleted house '{house.Name}'.");
-        }
-        catch (Exception ex) { Status.Error(ex); }
-    }
 }

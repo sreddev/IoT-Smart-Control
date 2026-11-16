@@ -25,9 +25,14 @@ public sealed partial class DeviceManager : IAsyncDisposable
         foreach (var d in Config.Devices) _devices[d.Id] = new DeviceRuntime(this, d);
         RecreateCloud();
         RecreateSmartThings();
-        if (matter != null)
+        if (matter != null && EnsureMatterStorageKey() is null)
         {
-            Matter = new MatterBridgeClient(matter);
+            MatterUnavailableReason = "Matter is disabled: it needs a secure secret store to protect its keys, and " +
+                                      store.ProtectionDescription + ".";
+        }
+        else if (matter != null)
+        {
+            Matter = new MatterBridgeClient(matter with { StorageKey = Config.MatterStorageKey });
             Matter.StateReceived += (nodeId, state) => FindMatter(nodeId)?.ApplyMatterState(state);
             Matter.ConnectionChanged += (nodeId, status) => FindMatter(nodeId)?.ApplyMatterConnection(status);
         }
@@ -35,10 +40,43 @@ public sealed partial class DeviceManager : IAsyncDisposable
 
     public AppConfig Config { get; }
     public string ConfigPath => _store.Path;
+    /// <summary>The store the configuration is saved to (backup/restore writes through it).</summary>
+    public ConfigStore Store => _store;
     public TuyaCloudClient? Cloud { get; private set; }
     public SmartThingsClient? SmartThings { get; private set; }
-    /// <summary>The Matter controller bridge, or null when Node.js / the bridge is not available.</summary>
+    /// <summary>The Matter controller bridge, or null when Node.js / the bridge / a secret store is not available.</summary>
     public MatterBridgeClient? Matter { get; }
+    /// <summary>Why Matter is off although the bridge was found (e.g. no secure secret store), else null.</summary>
+    public string? MatterUnavailableReason { get; }
+
+    /// <summary>Where secrets are protected ("Windows DPAPI", "the desktop keyring (Secret Service)", …).</summary>
+    public string SecretProtection => _store.ProtectionDescription;
+    /// <summary>The last save had to leave secrets out because this machine has no secure store.</summary>
+    public bool SecretsNotSaved => _store.SecretsNotSaved;
+
+    /// <summary>
+    /// The key that encrypts the Matter controller's storage: created once (32 random bytes), kept in the
+    /// config protected like every other secret. Null when it can't be stored securely.
+    /// </summary>
+    private string? EnsureMatterStorageKey()
+    {
+        if (Config.MatterStorageKey is { } existing && IsValidKey(existing)) return existing;
+        if (_store.Protector == null) return null;
+        Config.MatterStorageKey = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+        Save();
+        if (_store.SecretsNotSaved)
+        {
+            Config.MatterStorageKey = null;
+            return null;
+        }
+        return Config.MatterStorageKey;
+
+        static bool IsValidKey(string s)
+        {
+            try { return Convert.FromBase64String(s).Length == 32; }
+            catch (FormatException) { return false; }
+        }
+    }
     public IReadOnlyList<CloudScene> CloudScenes { get; private set; } = [];
     public IReadOnlyList<CloudAutomation> CloudAutomations { get; private set; } = [];
 
@@ -62,6 +100,13 @@ public sealed partial class DeviceManager : IAsyncDisposable
         Cloud = !string.IsNullOrWhiteSpace(c.ClientId) && !string.IsNullOrWhiteSpace(c.ClientSecret)
             ? new TuyaCloudClient(c.Region, c.ClientId.Trim(), c.ClientSecret.Trim())
             : null;
+    }
+
+    /// <summary>Tests: talk to SmartThings through the given client (e.g. one with a fake HTTP handler).</summary>
+    internal void UseSmartThings(SmartThingsClient client)
+    {
+        SmartThings?.Dispose();
+        SmartThings = client;
     }
 
     public void RecreateSmartThings()

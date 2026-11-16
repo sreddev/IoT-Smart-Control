@@ -33,7 +33,7 @@ public sealed record ColourSwatch(string Name, HsvColor Colour)
 public sealed class LightControlViewModel : ObservableObject
 {
     private readonly ILightTarget _target;
-    private readonly Debouncer _debounce = new(TimeSpan.FromMilliseconds(250));
+    private readonly LatestOnlySender _debounce = new(TimeSpan.FromMilliseconds(150), Status.Error);
     private bool _suppress;
     private bool _isOn;
     private string _mode = "white";
@@ -186,6 +186,8 @@ public sealed class LightControlViewModel : ObservableObject
     {
         var p = d.Light;
         if (p == null) return;
+        // still sending the user's changes (e.g. mid-drag): the device's values are behind, don't jump back
+        if (_debounce.IsBusy) return;
         _suppress = true;
         try
         {

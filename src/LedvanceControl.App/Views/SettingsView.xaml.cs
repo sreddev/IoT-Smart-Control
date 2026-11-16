@@ -17,7 +17,14 @@ public partial class SettingsView : UserControl
             CategoryCombo.ItemsSource = vm.Categories;
             SecretBox.Password = vm.ClientSecret ?? "";
             StSecretBox.Password = vm.StClientSecret ?? "";
+            // a device was added: the form gets a fresh NewDevice, so clear the masked key box too
+            vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SettingsViewModel.NewDevice)) NewKeyBox.Clear(); };
         };
+    }
+
+    private void NewKeyBox_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is SettingsViewModel vm) vm.NewDevice.LocalKey = NewKeyBox.Password;
     }
 
     // PasswordBox.Password is not bindable
