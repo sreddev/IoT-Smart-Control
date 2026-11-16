@@ -92,6 +92,9 @@ public sealed class GroupsViewModel : ObservableObject
     }
 
     public ObservableCollection<GroupViewModel> Groups { get; } = [];
+
+    /// <summary>Groups belong to the selected house, so only its devices can be members.</summary>
+    private IEnumerable<DeviceViewModel> HouseDevices => _main.Devices.Where(d => d.HouseId == _main.Manager.CurrentHouse.Id);
     public ICommand AddCommand { get; }
     public ICommand DeleteCommand { get; }
 
@@ -104,17 +107,18 @@ public sealed class GroupsViewModel : ObservableObject
     public void Reload()
     {
         var id = Selected?.Config.Id;
+        var house = _main.Manager.CurrentHouse.Id;
         Groups.Clear();
-        foreach (var g in _main.Manager.Config.Groups) Groups.Add(new GroupViewModel(_main.Manager, g, _main.Devices));
+        foreach (var g in _main.Manager.Config.Groups.Where(g => g.HouseId == house)) Groups.Add(new GroupViewModel(_main.Manager, g, HouseDevices));
         Selected = Groups.FirstOrDefault(g => g.Config.Id == id) ?? Groups.FirstOrDefault();
     }
 
     private void Add()
     {
-        var g = new GroupConfig { Name = $"Group {Groups.Count + 1}" };
+        var g = new GroupConfig { Name = $"Group {Groups.Count + 1}", HouseId = _main.Manager.CurrentHouse.Id };
         _main.Manager.Config.Groups.Add(g);
         _main.Manager.Save();
-        var vm = new GroupViewModel(_main.Manager, g, _main.Devices);
+        var vm = new GroupViewModel(_main.Manager, g, HouseDevices);
         Groups.Add(vm);
         Selected = vm;
     }
@@ -275,8 +279,10 @@ public sealed class SchedulesViewModel : ObservableObject
         Entries.Clear();
         foreach (var e in _main.Manager.Config.Schedules) Entries.Add(e);
         Targets.Clear();
-        foreach (var d in _main.Devices) Targets.Add(new TargetOption(ScheduleTarget.Device, d.Id, d.Name));
-        foreach (var g in _main.Manager.Config.Groups) Targets.Add(new TargetOption(ScheduleTarget.Group, g.Id, g.Name));
+        var several = _main.Manager.Houses.Count > 1;
+        foreach (var d in _main.Devices) Targets.Add(new TargetOption(ScheduleTarget.Device, d.Id, d.NameWithHouse));
+        foreach (var g in _main.Manager.Config.Groups)
+            Targets.Add(new TargetOption(ScheduleTarget.Group, g.Id, several ? $"{g.Name} · {_main.Manager.FindHouse(g.HouseId)?.Name}" : g.Name));
         foreach (var s in _main.Manager.Config.Scenes) Targets.Add(new TargetOption(ScheduleTarget.LocalScene, s.Id, s.Name));
         foreach (var s in _main.Manager.CloudScenes) Targets.Add(new TargetOption(ScheduleTarget.CloudScene, s.SceneId, s.Name, s.HomeId));
     }

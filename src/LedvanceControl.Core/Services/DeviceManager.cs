@@ -10,25 +10,73 @@ namespace LedvanceControl.Core.Services;
 /// Owns the configuration, the device runtimes and the optional cloud client.
 /// Everything the UI does goes through here.
 /// </summary>
-public sealed class DeviceManager : IAsyncDisposable
+public sealed partial class DeviceManager : IAsyncDisposable
 {
     private readonly ConfigStore _store;
     private readonly Dictionary<string, DeviceRuntime> _devices = new();
     private readonly object _saveGate = new();
 
-    public DeviceManager(ConfigStore store)
+    /// <param name="matter">Where the Matter bridge lives; null disables Matter (e.g. Node.js not installed).</param>
+    public DeviceManager(ConfigStore store, MatterBridgeOptions? matter = null)
     {
         _store = store;
         Config = store.Load();
+        if (EnsureHouses()) Save();
         foreach (var d in Config.Devices) _devices[d.Id] = new DeviceRuntime(this, d);
         RecreateCloud();
         RecreateSmartThings();
+        if (matter != null && EnsureMatterStorageKey() is null)
+        {
+            MatterUnavailableReason = "Matter is disabled: it needs a secure secret store to protect its keys, and " +
+                                      store.ProtectionDescription + ".";
+        }
+        else if (matter != null)
+        {
+            Matter = new MatterBridgeClient(matter with { StorageKey = Config.MatterStorageKey });
+            Matter.StateReceived += (nodeId, state) => FindMatter(nodeId)?.ApplyMatterState(state);
+            Matter.ConnectionChanged += (nodeId, status) => FindMatter(nodeId)?.ApplyMatterConnection(status);
+        }
     }
 
     public AppConfig Config { get; }
     public string ConfigPath => _store.Path;
+    /// <summary>The store the configuration is saved to (backup/restore writes through it).</summary>
+    public ConfigStore Store => _store;
     public TuyaCloudClient? Cloud { get; private set; }
     public SmartThingsClient? SmartThings { get; private set; }
+    /// <summary>The Matter controller bridge, or null when Node.js / the bridge / a secret store is not available.</summary>
+    public MatterBridgeClient? Matter { get; }
+    /// <summary>Why Matter is off although the bridge was found (e.g. no secure secret store), else null.</summary>
+    public string? MatterUnavailableReason { get; }
+
+    /// <summary>Where secrets are protected ("Windows DPAPI", "the desktop keyring (Secret Service)", …).</summary>
+    public string SecretProtection => _store.ProtectionDescription;
+    /// <summary>The last save had to leave secrets out because this machine has no secure store.</summary>
+    public bool SecretsNotSaved => _store.SecretsNotSaved;
+
+    /// <summary>
+    /// The key that encrypts the Matter controller's storage: created once (32 random bytes), kept in the
+    /// config protected like every other secret. Null when it can't be stored securely.
+    /// </summary>
+    private string? EnsureMatterStorageKey()
+    {
+        if (Config.MatterStorageKey is { } existing && IsValidKey(existing)) return existing;
+        if (_store.Protector == null) return null;
+        Config.MatterStorageKey = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+        Save();
+        if (_store.SecretsNotSaved)
+        {
+            Config.MatterStorageKey = null;
+            return null;
+        }
+        return Config.MatterStorageKey;
+
+        static bool IsValidKey(string s)
+        {
+            try { return Convert.FromBase64String(s).Length == 32; }
+            catch (FormatException) { return false; }
+        }
+    }
     public IReadOnlyList<CloudScene> CloudScenes { get; private set; } = [];
     public IReadOnlyList<CloudAutomation> CloudAutomations { get; private set; } = [];
 
@@ -52,6 +100,13 @@ public sealed class DeviceManager : IAsyncDisposable
         Cloud = !string.IsNullOrWhiteSpace(c.ClientId) && !string.IsNullOrWhiteSpace(c.ClientSecret)
             ? new TuyaCloudClient(c.Region, c.ClientId.Trim(), c.ClientSecret.Trim())
             : null;
+    }
+
+    /// <summary>Tests: talk to SmartThings through the given client (e.g. one with a fake HTTP handler).</summary>
+    internal void UseSmartThings(SmartThingsClient client)
+    {
+        SmartThings?.Dispose();
+        SmartThings = client;
     }
 
     public void RecreateSmartThings()
@@ -78,20 +133,27 @@ public sealed class DeviceManager : IAsyncDisposable
         progress?.Report("Loading SmartThings devices…");
         var devices = await st.GetDevicesAsync(ct);
 
+        // Each SmartThings location is a house; its rooms are that house's rooms.
         var rooms = new Dictionary<string, string>();
+        var houseByLocation = new Dictionary<string, HouseConfig>();
         foreach (var loc in devices.Select(d => d.LocationId).OfType<string>().Distinct())
-            foreach (var r in await st.GetRoomsAsync(loc, ct))
-                rooms[r.RoomId] = r.Name;
+        {
+            var house = LinkHouse(HouseSource.SmartThings, loc, await st.GetLocationNameAsync(loc, ct));
+            houseByLocation[loc] = house;
+            var locRooms = await st.GetRoomsAsync(loc, ct);
+            foreach (var r in locRooms) rooms[r.RoomId] = r.Name;
+            MergeRooms(house, locRooms.Select(r => r.Name));
+        }
 
         int count = 0;
         foreach (var d in devices.Where(d => d.Capabilities.Contains(SmartThingsMapping.CapSwitch)))
         {
             var cfg = Config.Devices.FirstOrDefault(c => c.Id == d.DeviceId) ?? new DeviceConfig { Id = d.DeviceId };
             if (!Config.Devices.Contains(cfg)) Config.Devices.Add(cfg);
-            cfg.Name = d.Label;
+            var houseId = d.LocationId != null && houseByLocation.TryGetValue(d.LocationId, out var h) ? h.Id : cfg.HouseId ?? CurrentHouse.Id;
+            ApplySynced(cfg, d.Label, d.RoomId != null && rooms.TryGetValue(d.RoomId, out var rn) ? rn : null, houseId);
             cfg.SmartThingsId = d.DeviceId;
             cfg.Category = SmartThingsMapping.GuessCategory(d.Capabilities);
-            cfg.Room = d.RoomId != null && rooms.TryGetValue(d.RoomId, out var rn) ? rn : cfg.Room;
             cfg.Schema = SmartThingsMapping.BuildSchema(d.Capabilities);
             cfg.PreferLocal = false;
             if (_devices.TryGetValue(d.DeviceId, out var rt)) rt.SchemaChanged();
@@ -128,7 +190,8 @@ public sealed class DeviceManager : IAsyncDisposable
                 cfg = new DeviceConfig { Id = cd.Id };
                 Config.Devices.Add(cfg);
             }
-            cfg.Name = cd.Name;
+            ApplySynced(cfg, cd.Name, room: null);
+            cfg.HouseId ??= CurrentHouse.Id; // refined below once the Tuya homes are known
             cfg.LocalKey = cd.LocalKey ?? cfg.LocalKey;
             cfg.Category = cd.Category;
             cfg.ProductId = cd.ProductId;
@@ -159,11 +222,17 @@ public sealed class DeviceManager : IAsyncDisposable
             catch (TuyaCloudException) { continue; }
             foreach (var home in homes)
             {
+                // Each Tuya home is a house; its devices live there.
+                var house = LinkHouse(HouseSource.Tuya, home.HomeId, home.Name);
+                foreach (var dev in Config.Devices.Where(d => d.InCloud && d.HomeId == home.HomeId))
+                    ApplySynced(dev, name: null, room: null, house.Id);
                 try
                 {
-                    foreach (var room in await cloud.GetRoomsAsync(home.HomeId, ct))
+                    var cloudRooms = await cloud.GetRoomsAsync(home.HomeId, ct);
+                    MergeRooms(house, cloudRooms.Select(r => r.Name));
+                    foreach (var room in cloudRooms)
                     foreach (var id in room.DeviceIds)
-                        if (Config.Devices.FirstOrDefault(d => d.Id == id) is { } dev) dev.Room = room.Name;
+                        if (Config.Devices.FirstOrDefault(d => d.Id == id) is { } dev) ApplySynced(dev, name: null, room.Name, house.Id);
                 }
                 catch (TuyaCloudException) { }
             }
@@ -196,6 +265,88 @@ public sealed class DeviceManager : IAsyncDisposable
         ListChanged?.Invoke();
     }
 
+    // ---------------------------------------------------------------- Matter
+
+    public const string MatterIdPrefix = "matter-";
+
+    private DeviceRuntime? FindMatter(string nodeId) =>
+        _devices.Values.FirstOrDefault(d => d.Config.MatterNodeId == nodeId);
+
+    private MatterBridgeClient RequireMatter() => Matter
+        ?? throw new InvalidOperationException("Matter needs Node.js (nodejs.org, LTS). Install it and restart the app.");
+
+    /// <summary>
+    /// Pairs a Matter device into this PC's own fabric (multi-admin: it stays paired with its other
+    /// apps) and adds it as a device. The device must have a pairing window open.
+    /// </summary>
+    public async Task<DeviceRuntime> PairMatterAsync(string pairingCode, string? ip = null, IProgress<string>? progress = null, CancellationToken ct = default)
+    {
+        var bridge = RequireMatter();
+        progress?.Report("Pairing over Matter (this can take up to a minute)…");
+        var info = await bridge.CommissionAsync(pairingCode, ip, ct);
+        var rt = UpsertMatter(info, renameExisting: true);
+        Save();
+        ListChanged?.Invoke();
+        if (info.State != null) rt.ApplyMatterState(info.State);
+        progress?.Report($"Paired '{rt.Config.Name}' over Matter.");
+        return rt;
+    }
+
+    /// <summary>Re-reads the list of Matter devices paired with this PC and adds/prunes devices accordingly.</summary>
+    public async Task SyncMatterAsync(IProgress<string>? progress = null, CancellationToken ct = default)
+    {
+        var bridge = RequireMatter();
+        progress?.Report("Reading Matter devices…");
+        var nodes = await bridge.GetNodesAsync(ct);
+        foreach (var n in nodes) UpsertMatter(n, renameExisting: false);
+
+        var live = nodes.Select(n => n.NodeId).ToHashSet();
+        var stale = Config.Devices.Where(c => c.MatterNodeId != null && !live.Contains(c.MatterNodeId)).Select(c => c.Id).ToList();
+        foreach (var id in stale) RemoveInternal(id);
+
+        Save();
+        ListChanged?.Invoke();
+        var msg = $"{nodes.Count} Matter device(s) paired with this PC";
+        if (stale.Count > 0) msg += $", removed {stale.Count} no longer paired";
+        progress?.Report(msg + ".");
+    }
+
+    public Task<IReadOnlyList<MatterCommissionableDevice>> DiscoverMatterAsync(TimeSpan duration, CancellationToken ct = default) =>
+        RequireMatter().DiscoverAsync(duration, ct);
+
+    private DeviceRuntime UpsertMatter(MatterNodeInfo info, bool renameExisting)
+    {
+        var id = MatterIdPrefix + info.NodeId;
+        var cfg = Config.Devices.FirstOrDefault(c => c.MatterNodeId == info.NodeId) ?? Config.Devices.FirstOrDefault(c => c.Id == id);
+        bool isNew = cfg == null;
+        cfg ??= new DeviceConfig { Id = id, Name = info.Name, HouseId = CurrentHouse.Id }; // paired into the selected house
+        if (isNew) Config.Devices.Add(cfg);
+        else if (renameExisting && !string.IsNullOrWhiteSpace(info.Name)) ApplySynced(cfg, info.Name, room: null);
+
+        cfg.MatterNodeId = info.NodeId;
+        cfg.ProductName = info.ProductName ?? cfg.ProductName;
+        cfg.PreferLocal = true;
+        if (info.Capabilities is { } caps)
+        {
+            cfg.Category = MatterMapping.GuessCategory(caps);
+            cfg.Schema = MatterMapping.BuildSchema(caps);
+        }
+        else if (cfg.Schema.Count == 0)
+        {
+            cfg.Category ??= "dj";
+            cfg.Schema = MatterMapping.BuildSchema(new MatterCapabilities { Level = true });
+        }
+
+        if (_devices.TryGetValue(cfg.Id, out var rt))
+        {
+            rt.SchemaChanged();
+            return rt;
+        }
+        rt = new DeviceRuntime(this, cfg);
+        _devices[cfg.Id] = rt;
+        return rt;
+    }
+
     // ---------------------------------------------------------------- LAN
 
     /// <summary>Listens for device broadcasts and updates IP/protocol version of known devices.</summary>
@@ -218,6 +369,7 @@ public sealed class DeviceManager : IAsyncDisposable
 
     public DeviceRuntime AddOrUpdate(DeviceConfig cfg)
     {
+        if (cfg.HouseId == null || FindHouse(cfg.HouseId) == null) cfg.HouseId = CurrentHouse.Id;
         var existing = Config.Devices.FindIndex(d => d.Id == cfg.Id);
         if (existing >= 0) Config.Devices[existing] = cfg;
         else Config.Devices.Add(cfg);
@@ -231,6 +383,9 @@ public sealed class DeviceManager : IAsyncDisposable
 
     public void Remove(string id)
     {
+        // A Matter device is also removed from this PC's fabric (its other controllers keep it).
+        if (Find(id)?.Config.MatterNodeId is { } nodeId && Matter != null)
+            _ = Matter.RemoveAsync(nodeId).ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
         RemoveInternal(id);
         Save();
         ListChanged?.Invoke();
@@ -332,5 +487,6 @@ public sealed class DeviceManager : IAsyncDisposable
         foreach (var d in _devices.Values) await d.DisposeAsync();
         Cloud?.Dispose();
         SmartThings?.Dispose();
+        if (Matter != null) await Matter.DisposeAsync();
     }
 }

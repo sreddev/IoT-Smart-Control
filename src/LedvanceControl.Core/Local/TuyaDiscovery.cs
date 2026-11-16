@@ -7,7 +7,11 @@ using System.Text.Json;
 namespace LedvanceControl.Core.Local;
 
 /// <summary>A device found through its UDP broadcast.</summary>
-public sealed record DiscoveredDevice(string Id, string Ip, string Version, string? ProductKey, bool Encrypted);
+public sealed record DiscoveredDevice(string Id, string Ip, string Version, string? ProductKey, bool Encrypted)
+{
+    /// <summary>Numeric sort key for the IP column.</summary>
+    public string IpSortKey => Model.SortKeys.Ip(Ip);
+}
 
 /// <summary>
 /// Listens for the broadcasts Tuya devices send every few seconds:

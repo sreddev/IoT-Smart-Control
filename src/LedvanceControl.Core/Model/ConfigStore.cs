@@ -1,136 +1,168 @@
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using LedvanceControl.Core.Security;
 
 namespace LedvanceControl.Core.Model;
 
 /// <summary>
-/// Loads/saves <see cref="AppConfig"/> as JSON under %APPDATA%\IoTSmartControl.
-/// Secrets (cloud client secret, device local keys) are encrypted with Windows DPAPI for the current user.
+/// Loads/saves <see cref="AppConfig"/> as JSON (Windows: %APPDATA%\IoTSmartControl, Linux:
+/// ~/.config/IoTSmartControl). Secrets — cloud and SmartThings client secrets, the SmartThings refresh
+/// token, device local keys and the Matter storage key — are encrypted with the platform's secret store
+/// (<see cref="SecretProtection"/>). Secrets are never written in plain text: without a secure store
+/// they are left out of the file (<see cref="SecretsNotSaved"/>). The folder is owner-only.
 /// </summary>
 public sealed class ConfigStore
 {
-    private const string ProtectedPrefix = "dpapi:";
     public static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    public ConfigStore(string? path = null)
+    /// <summary>Tags of every protection format this or an older version may have written.</summary>
+    private static readonly string[] KnownPrefixes = ["dpapi:", "aesgcm1:"];
+
+    private bool _directorySecured;
+    private readonly bool _ownsDirectory;
+
+    /// <summary>Uses the platform's default secret store.</summary>
+    public ConfigStore(string? path = null) : this(path, protector: null, useDefaultProtector: true) { }
+
+    /// <summary>Uses the given secret store; null means none is available (secrets are not saved).</summary>
+    public ConfigStore(string? path, ISecretProtector? protector) : this(path, protector, useDefaultProtector: false) { }
+
+    private ConfigStore(string? path, ISecretProtector? protector, bool useDefaultProtector)
     {
         // LEDVANCE_CONFIG allows a portable / alternative configuration file
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        Path = path ?? Environment.GetEnvironmentVariable("LEDVANCE_CONFIG")
-            ?? System.IO.Path.Combine(appData, "IoTSmartControl", "config.json");
+        var defaultPath = System.IO.Path.Combine(appData, "IoTSmartControl", "config.json");
+        Path = path ?? Environment.GetEnvironmentVariable("LEDVANCE_CONFIG") ?? defaultPath;
+        // Lock down a folder only when it belongs to the app: its default folder, or one it creates now.
+        // A config placed in an existing folder (e.g. via LEDVANCE_CONFIG) only gets the file restricted.
+        _ownsDirectory = string.Equals(System.IO.Path.GetFullPath(Path), System.IO.Path.GetFullPath(defaultPath), StringComparison.OrdinalIgnoreCase)
+                         || !System.IO.Directory.Exists(Directory);
+        Protector = useDefaultProtector ? SecretProtection.CreateDefault(Directory) : protector;
 
         // Migrate a config written by the previous app name (%APPDATA%\LedvanceControl) so an
-        // existing cloud/SmartThings connection carries over. DPAPI secrets are current-user scoped
-        // and stay decryptable after the move.
+        // existing cloud/SmartThings connection carries over (DPAPI secrets are user-scoped).
         if (path == null && !File.Exists(Path))
         {
             var legacy = System.IO.Path.Combine(appData, "LedvanceControl", "config.json");
             if (File.Exists(legacy))
             {
-                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
+                SecureDirectory();
                 File.Copy(legacy, Path);
+                FilePermissions.RestrictFile(Path);
             }
         }
     }
 
     public string Path { get; }
+    public string Directory => System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(Path))!;
+
+    /// <summary>The secret store in use, or null when this machine has none.</summary>
+    public ISecretProtector? Protector { get; }
+
+    /// <summary>"Windows DPAPI", "the desktop keyring (Secret Service)", … or a warning.</summary>
+    public string ProtectionDescription => Protector?.Name ?? "no secure store available — secrets are not saved";
+
+    /// <summary>True after a save had to leave secrets out (no secure store on this machine).</summary>
+    public bool SecretsNotSaved { get; private set; }
 
     public AppConfig Load()
     {
         if (!File.Exists(Path)) return new AppConfig();
+        SecureDirectory();
         var cfg = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(Path), JsonOptions) ?? new AppConfig();
-        cfg.Cloud.ClientSecret = Unprotect(cfg.Cloud.ClientSecret);
-        cfg.SmartThings.ClientSecret = Unprotect(cfg.SmartThings.ClientSecret);
-        cfg.SmartThings.RefreshToken = Unprotect(cfg.SmartThings.RefreshToken);
-        foreach (var d in cfg.Devices) d.LocalKey = Unprotect(d.LocalKey);
+        var plaintextFound = false;
+        string? Open(string? s)
+        {
+            var (value, wasPlain) = Unprotect(s);
+            plaintextFound |= wasPlain;
+            return value;
+        }
+        cfg.Cloud.ClientSecret = Open(cfg.Cloud.ClientSecret);
+        cfg.SmartThings.ClientSecret = Open(cfg.SmartThings.ClientSecret);
+        cfg.SmartThings.RefreshToken = Open(cfg.SmartThings.RefreshToken);
+        cfg.MatterStorageKey = Open(cfg.MatterStorageKey);
+        foreach (var d in cfg.Devices) d.LocalKey = Open(d.LocalKey);
+
+        // A plain-text secret (e.g. written by an older Linux build): re-save so it gets encrypted,
+        // or dropped from disk when there is no secure store.
+        if (plaintextFound) Save(cfg);
         return cfg;
     }
 
     public void Save(AppConfig cfg)
     {
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
+        SecureDirectory();
         // serialize a protected copy so the in-memory config keeps plaintext secrets
         var copy = JsonSerializer.Deserialize<AppConfig>(JsonSerializer.Serialize(cfg, JsonOptions), JsonOptions)!;
+        SecretsNotSaved = false;
         copy.Cloud.ClientSecret = Protect(copy.Cloud.ClientSecret);
         copy.SmartThings.ClientSecret = Protect(copy.SmartThings.ClientSecret);
         copy.SmartThings.RefreshToken = Protect(copy.SmartThings.RefreshToken);
+        copy.MatterStorageKey = Protect(copy.MatterStorageKey);
         foreach (var d in copy.Devices) d.LocalKey = Protect(d.LocalKey);
+
         var tmp = Path + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(copy, JsonOptions));
+        var options = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write };
+        if (!OperatingSystem.IsWindows()) options.UnixCreateMode = FilePermissions.PrivateFileMode; // 0600 from the start
+        using (var writer = new StreamWriter(tmp, new UTF8Encoding(false), options))
+            writer.Write(JsonSerializer.Serialize(copy, JsonOptions));
         File.Move(tmp, Path, overwrite: true);
+        try { FilePermissions.RestrictFile(Path, ownAcl: !_ownsDirectory); }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+        {
+            System.Diagnostics.Debug.WriteLine("Could not restrict " + Path + ": " + ex.Message);
+        }
     }
 
-    private static string? Protect(string? s)
+    private void SecureDirectory()
     {
-        if (string.IsNullOrEmpty(s) || !OperatingSystem.IsWindows()) return s;
-        return ProtectedPrefix + Convert.ToBase64String(Dpapi.Protect(Encoding.UTF8.GetBytes(s)));
-    }
-
-    private static string? Unprotect(string? s)
-    {
-        if (s == null || !s.StartsWith(ProtectedPrefix, StringComparison.Ordinal)) return s;
+        if (_directorySecured) return;
+        if (!_ownsDirectory)
+        {
+            System.IO.Directory.CreateDirectory(Directory); // an existing, shared folder: leave its permissions alone
+            _directorySecured = true;
+            return;
+        }
         try
         {
-            return Encoding.UTF8.GetString(Dpapi.Unprotect(Convert.FromBase64String(s[ProtectedPrefix.Length..])));
+            FilePermissions.SecureDirectory(Directory);
+            _directorySecured = true;
         }
-        catch
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or InvalidOperationException
+                                       or PlatformNotSupportedException or System.Security.Principal.IdentityNotMappedException)
         {
-            return null; // config copied from another user/machine
+            // e.g. a directory on a filesystem without ACLs / owned by someone else: keep working
+            System.Diagnostics.Debug.WriteLine("Could not restrict permissions on " + Directory + ": " + ex.Message);
         }
     }
 
-    /// <summary>Minimal DPAPI (CryptProtectData) wrapper, current-user scope.</summary>
-    private static class Dpapi
+    private string? Protect(string? s)
     {
-        [StructLayout(LayoutKind.Sequential)]
-        private struct DataBlob
+        if (string.IsNullOrEmpty(s)) return s;
+        if (Protector == null)
         {
-            public int cbData;
-            public IntPtr pbData;
+            SecretsNotSaved = true;
+            return null;
         }
-
-        [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        private static extern bool CryptProtectData(ref DataBlob pDataIn, string? szDataDescr, IntPtr pOptionalEntropy,
-            IntPtr pvReserved, IntPtr pPromptStruct, int dwFlags, out DataBlob pDataOut);
-
-        [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        private static extern bool CryptUnprotectData(ref DataBlob pDataIn, IntPtr ppszDataDescr, IntPtr pOptionalEntropy,
-            IntPtr pvReserved, IntPtr pPromptStruct, int dwFlags, out DataBlob pDataOut);
-
-        [DllImport("kernel32.dll")]
-        private static extern IntPtr LocalFree(IntPtr hMem);
-
-        private const int UiForbidden = 0x1;
-
-        public static byte[] Protect(byte[] data) => Run(data, protect: true);
-        public static byte[] Unprotect(byte[] data) => Run(data, protect: false);
-
-        private static byte[] Run(byte[] data, bool protect)
+        try { return Protector.Protect(s); }
+        catch (SecretStoreUnavailableException)
         {
-            var handle = GCHandle.Alloc(data, GCHandleType.Pinned);
-            try
-            {
-                var input = new DataBlob { cbData = data.Length, pbData = handle.AddrOfPinnedObject() };
-                bool ok = protect
-                    ? CryptProtectData(ref input, null, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, UiForbidden, out var output)
-                    : CryptUnprotectData(ref input, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, UiForbidden, out output);
-                if (!ok) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-                try
-                {
-                    var result = new byte[output.cbData];
-                    Marshal.Copy(output.pbData, result, 0, output.cbData);
-                    return result;
-                }
-                finally
-                {
-                    LocalFree(output.pbData);
-                }
-            }
-            finally
-            {
-                handle.Free();
-            }
+            SecretsNotSaved = true;
+            return null;
         }
+    }
+
+    /// <returns>The plaintext (null when it can't be decrypted here) and whether the stored value was plain text.</returns>
+    private (string? Value, bool WasPlain) Unprotect(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) return (s, false);
+        if (Protector != null && s.StartsWith(Protector.Prefix, StringComparison.Ordinal))
+        {
+            try { return (Protector.Unprotect(s), false); }
+            catch (SecretStoreUnavailableException) { return (null, false); }
+        }
+        if (KnownPrefixes.Any(p => s.StartsWith(p, StringComparison.Ordinal)))
+            return (null, false); // protected by a store that isn't available here (other user / machine / OS)
+        return (s, true);         // legacy plain text
     }
 }

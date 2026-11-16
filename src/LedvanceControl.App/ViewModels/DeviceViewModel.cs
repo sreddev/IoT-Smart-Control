@@ -15,10 +15,19 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
     private bool _isOn;
     private bool _suppress;
     private bool _isSelected;
+    private bool _isEditing;
+    private string _editName = "";
+    private string _editRoom = "";
+    private readonly DeviceManager _manager;
 
-    public DeviceViewModel(DeviceRuntime runtime)
+    public DeviceViewModel(DeviceRuntime runtime, DeviceManager manager)
     {
         Runtime = runtime;
+        _manager = manager;
+        MoveHouseCommand = new RelayCommand(MoveHouse, _ => IsMovePending && CanMoveHouse && (!MoveRule.NeedsSmartPlusConfirmation || MoveConfirmed));
+        EditCommand = new RelayCommand(BeginEdit);
+        SaveEditCommand = new RelayCommand(SaveEdit, _ => !string.IsNullOrWhiteSpace(EditName));
+        CancelEditCommand = new RelayCommand(() => IsEditing = false);
         Light = new LightControlViewModel(this);
         Energy = new EnergyViewModel(runtime);
         RefreshCommand = new AsyncCommand(() => Runtime.RefreshAsync());
@@ -31,6 +40,7 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
         });
         RebuildDps();
         Runtime.Changed += _ => Application.Current?.Dispatcher.BeginInvoke(Update);
+        Runtime.Resent += (_, n) => Status.Info($"{Name}: SmartThings had not applied the last change; sent it again.");
         Update();
     }
 
@@ -38,7 +48,16 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
     public string Id => Runtime.Id;
     public string Name => Runtime.Config.Name;
     public string Room => string.IsNullOrWhiteSpace(Runtime.Config.Room) ? "No room" : Runtime.Config.Room!;
-    public string Subtitle => Runtime.Config.ProductName ?? Runtime.Config.Category ?? Runtime.Config.Id;
+    /// <summary>Product name, or else a readable device type ("Light", "Plug"…) instead of the raw category code.</summary>
+    public string Subtitle => Runtime.Config.ProductName ?? Runtime.Config.Category switch
+    {
+        "dj" or "dd" or "fwd" or "xdd" or "dc" => "Light",
+        "cz" or "pc" => "Plug",
+        "kg" or "tdq" => "Switch",
+        "fs" => "Fan",
+        null or "" => IsLight ? "Light" : "Device",
+        var other => other,
+    };
     public bool IsLight => Runtime.Light != null;
     public bool HasPower => Runtime.PowerCode != null;
     public LightControlViewModel Light { get; }
@@ -46,6 +65,120 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
     public ObservableCollection<DpViewModel> Dps { get; } = [];
     public ICommand RefreshCommand { get; }
     public ICommand DiagnosticsCommand { get; }
+
+    // ---------------------------------------------------------------- rename / room
+
+    public ICommand EditCommand { get; }
+    public ICommand SaveEditCommand { get; }
+    public ICommand CancelEditCommand { get; }
+
+    public bool IsEditing { get => _isEditing; set => Set(ref _isEditing, value); }
+    public string EditName { get => _editName; set => Set(ref _editName, value); }
+    /// <summary>Room typed or picked in the editable combo box; blank = no room.</summary>
+    public string EditRoom { get => _editRoom; set => Set(ref _editRoom, value); }
+    /// <summary>Snapshot taken when the editor opens. A fresh list on every get would make the editable
+    /// ComboBox reset its text (and push "" back into <see cref="EditRoom"/>).</summary>
+    public IReadOnlyList<string> KnownRooms { get; private set; } = [];
+
+    /// <summary>Where the name/room came from, shown under the editor.</summary>
+    public string NameSourceHint =>
+        Runtime.Config.NameEdited || Runtime.Config.RoomEdited
+            ? "Edited in this app — syncs won't overwrite your name/room."
+            : Runtime.Config.SmartThingsId != null ? "Name and room come from SmartThings until you change them here."
+            : Runtime.Config.InCloud ? "Name and room come from the Tuya cloud until you change them here."
+            : Runtime.Config.MatterNodeId != null ? "Matter bulbs don't carry the name/room set in their phone app — set them here."
+            : "Set the name and room shown in this app.";
+
+    // ---------------------------------------------------------------- house
+
+    private string? _moveTargetHouseId;
+    private bool _moveConfirmed;
+
+    public string? HouseId => Runtime.Config.HouseId;
+    public string HouseName => _manager.FindHouse(HouseId)?.Name ?? "";
+    /// <summary>"Name · House" when there are several houses (for the house-independent Scenes / Schedules pages).</summary>
+    public string NameWithHouse => _manager.Houses.Count > 1 ? $"{Name} · {HouseName}" : Name;
+
+    public HouseMoveRule MoveRule => _manager.HouseMoveRuleFor(Runtime.Config);
+    public bool CanMoveHouse => MoveRule.Allowed;
+    public string? MoveBlockedReason => MoveRule.Allowed ? null : MoveRule.Reason;
+    public bool MoveNeedsConfirmation => MoveRule.NeedsSmartPlusConfirmation;
+    /// <summary>Every house, the device's own included (it is the initial selection).</summary>
+    public IReadOnlyList<HouseConfig> AllHouses { get; private set; } = [];
+    /// <summary>House picked in the editor's House box; equals <see cref="HouseId"/> until the user picks another.</summary>
+    public string? MoveTargetHouseId
+    {
+        get => _moveTargetHouseId;
+        set
+        {
+            if (!Set(ref _moveTargetHouseId, value)) return;
+            MoveConfirmed = false;
+            OnPropertyChanged(nameof(IsMovePending));
+            OnPropertyChanged(nameof(ShowMoveConfirmation));
+            CommandManager.InvalidateRequerySuggested(); // Move's enabled state
+        }
+    }
+    /// <summary>Another house than the current one is selected.</summary>
+    public bool IsMovePending => MoveTargetHouseId != null && MoveTargetHouseId != HouseId;
+    public bool ShowMoveConfirmation => IsMovePending && MoveNeedsConfirmation;
+    /// <summary>"I already moved this bulb to that house in the LEDVANCE SMART+ app."</summary>
+    public bool MoveConfirmed
+    {
+        get => _moveConfirmed;
+        set { if (Set(ref _moveConfirmed, value)) CommandManager.InvalidateRequerySuggested(); }
+    }
+    public ICommand MoveHouseCommand { get; }
+
+    private void MoveHouse()
+    {
+        if (MoveTargetHouseId is not { } target) return;
+        var name = _manager.FindHouse(target)?.Name;
+        try
+        {
+            IsEditing = false;
+            _manager.MoveDeviceToHouse(Id, target, MoveConfirmed);
+            Status.Info($"Moved '{Name}' to {name}. Switch to that house to see it.");
+        }
+        catch (Exception ex) { Status.Error(ex); }
+    }
+
+    private void BeginEdit()
+    {
+        AllHouses = _manager.Houses.ToList();
+        OnPropertyChanged(nameof(AllHouses)); // items first, then the selection, so the box keeps it
+        _moveTargetHouseId = null;
+        MoveTargetHouseId = HouseId;
+        MoveConfirmed = false;
+        foreach (var p in new[] { nameof(HouseName), nameof(CanMoveHouse), nameof(MoveBlockedReason), nameof(MoveNeedsConfirmation) })
+            OnPropertyChanged(p);
+        // rooms first: replacing ItemsSource after setting the text would clear it again
+        KnownRooms = _manager.RoomsOf(HouseId ?? _manager.CurrentHouse.Id);
+        OnPropertyChanged(nameof(KnownRooms));
+        EditName = Runtime.Config.Name;
+        EditRoom = Runtime.Config.Room ?? "";
+        OnPropertyChanged(nameof(NameSourceHint));
+        IsEditing = true;
+        // the fields were filled in code, not typed: make Save/Move re-evaluate now
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    private void SaveEdit()
+    {
+        try
+        {
+            var renamed = EditName.Trim() != Runtime.Config.Name;
+            var newRoom = string.IsNullOrWhiteSpace(EditRoom) ? null : EditRoom.Trim();
+            var moved = !string.Equals(newRoom, Runtime.Config.Room, StringComparison.CurrentCultureIgnoreCase);
+            IsEditing = false;
+            if (renamed) _manager.RenameDevice(Id, EditName);
+            if (moved) _manager.SetDeviceRoom(Id, newRoom);
+            if (renamed || moved) Status.Info($"Saved '{Name}' in {Room}");
+        }
+        catch (Exception ex)
+        {
+            Status.Error(ex);
+        }
+    }
 
     /// <summary>Used by checklists (groups, scene capture).</summary>
     public bool IsSelected
@@ -63,8 +196,11 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
         _ => "",                      // generic
     };
 
-    public string StatusText => Runtime.Online
-        ? Runtime.LastTransport switch { Transport.Lan => "Online · LAN", Transport.Cloud => "Online · Cloud", Transport.SmartThings => "Online · SmartThings", _ => "Online" }
+    /// <summary>This device is being asked for its state right now (its card shows a spinner).</summary>
+    public bool IsRefreshing => Runtime.IsRefreshing;
+
+    public string StatusText => Runtime.IsRefreshing ? "Refreshing…" : Runtime.Online
+        ?Runtime.LastTransport switch { Transport.Lan => "Online · LAN", Transport.Cloud => "Online · Cloud", Transport.SmartThings => "Online · SmartThings", Transport.Matter => "Online · Matter (LAN)", _ => "Online" }
         : Runtime.LastError != null ? "Offline · " + Runtime.LastError : "Not refreshed";
 
     public bool IsOnline => Runtime.Online;
@@ -104,9 +240,11 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
         Energy.Load();
         foreach (var dp in Dps) dp.Load();
         OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(IsRefreshing));
         OnPropertyChanged(nameof(IsOnline));
         OnPropertyChanged(nameof(Name));
         OnPropertyChanged(nameof(Room));
+        OnPropertyChanged(nameof(NameWithHouse));
     }
 
     // ILightTarget
@@ -122,7 +260,7 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
 public sealed class DpViewModel : ObservableObject
 {
     private readonly DeviceRuntime _device;
-    private readonly Debouncer _debounce = new(TimeSpan.FromMilliseconds(300));
+    private readonly LatestOnlySender _debounce = new(TimeSpan.FromMilliseconds(150), Status.Error);
     private bool _suppress;
     private bool _bool;
     private long _raw;
@@ -205,7 +343,7 @@ public sealed class DpViewModel : ObservableObject
         switch (v)
         {
             case bool b: BoolValue = b; break;
-            case long l:
+            case long l when !_debounce.IsBusy: // mid-drag the device's value is behind the slider
                 _raw = l;
                 OnPropertyChanged(nameof(SliderPosition));
                 break;

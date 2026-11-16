@@ -23,11 +23,13 @@ public static class HelpTopics
             Intro = "Control your lights and plugs. Devices are grouped by room on the left; selecting one opens its panel on the right.",
             Steps =
             [
-                "Pick a device in the left list. Under its name a status line shows how it is reached: Online · LAN (direct, local), Online · Cloud (via Tuya), Online · SmartThings, or Offline with the reason.",
+                "Pick a device in the left list. Under its name a status line shows how it is reached: Online · LAN (direct, local), Online · Cloud (via Tuya), Online · SmartThings, Online · Matter (LAN), or Offline with the reason.",
                 "Flip the switch on a card — or in the panel header — to turn a device on or off. 'All off' at the top turns everything off at once.",
                 "For lights, use the panel tabs: White (brightness + colour temperature), Colour (hue / saturation / brightness plus quick colours) and Scenes (the 8 built-in Tuya light effects).",
                 "For energy-monitoring plugs, an Energy monitor panel shows live power draw (W), voltage (V), current (A) and total energy (kWh). It appears only when the device actually reports metering.",
-                "Refresh re-reads the current state. Diagnostics runs connectivity checks and reports exactly how the device is reached.",
+                "Devices refresh automatically when the app starts and whenever you reopen its window (if the last refresh is more than 30 seconds old); a spinner on each card shows which devices are still answering. Refresh re-reads everything on demand. Diagnostics runs connectivity checks and reports exactly how the device is reached.",
+                "Edit renames the device or moves it to another room of its house: pick a room or type a new one (leave it empty for 'No room'), then Save or press Enter. Your name and room are kept even when SmartThings / Tuya / Matter devices are synchronised again. The same card shows the device's house and, where allowed, moves it to another house.",
+                "The house picker at the top left chooses which house the Devices, Rooms and Groups pages show (and manages houses); 'All off' switches off the selected house.",
                 "The Data points card lists every raw function the device exposes; read-only values such as voltage are shown on the right.",
             ],
             Tip = "Control prefers your local network (LAN) whenever an IP address and 16-character local key are known, and falls back to the cloud otherwise.",
@@ -82,23 +84,60 @@ public static class HelpTopics
             [
                 "App settings — theme, start-minimized (autostart to tray) and close-to-tray.",
                 "Tuya cloud project — link your Tuya account to import devices, local keys and schemas (this enables local LAN control).",
+                "Matter over Wi-Fi — pair Matter bulbs straight to this PC and control them over the LAN, with no hub.",
                 "SmartThings — connect bulbs that are brand-locked to LEDVANCE but visible in Samsung SmartThings.",
                 "Local network — discover device IP addresses for LAN control, or import a tinytuya devices.json.",
-                "Devices — edit names, rooms and connection details for each known device.",
+                "Devices — edit names, rooms and connection details for each known device (rooms themselves are managed on the Rooms page).",
                 "Add a device manually — enter a device's id, key, IP and type by hand.",
             ],
-            Tip = "You usually need only one connection route per device: Tuya for full local control, or SmartThings for brand-locked bulbs.",
+            Tip = "You usually need only one connection route per device: Tuya or Matter for local control, or SmartThings for brand-locked bulbs.",
+        },
+
+        ["Rooms"] = new()
+        {
+            Title = "Houses and rooms",
+            Intro = "Your houses and their rooms, like the home screen of the LEDVANCE SMART+ app. Every device belongs to one house and one of its rooms. The house picker at the top left switches houses; Devices, Rooms and Groups then show that house.",
+            Steps =
+            [
+                "Houses — open the house picker at the top left and choose 'Manage houses…' to add, rename (type, then Save or Enter) and delete houses. Adding a house keeps you on the house you're viewing; pick the new one from the list to open it. Your only house can't be deleted, and neither can a house that still has devices.",
+                "Houses linked to a SmartThings location or a Tuya home are created and named by the sync; their devices always live there. Your own name for such a house is kept across syncs.",
+                "+ New room adds a room to the selected house; type its name in the Name box on the right. Delete room moves its devices to 'No room'. Two houses can each have a room with the same name.",
+                "Tick devices under 'Devices in this room' to move them here. A device is in one room at a time, so ticking it moves it from its current room (shown in brackets).",
+                "All on / All off and the light panel control every device in the room at once.",
+                "Moving a device to another house: open it on the Devices page and click Edit. SmartThings and Tuya devices follow their cloud home — move them in that app, then sync. A Matter bulb can move once you confirm you already moved it in the SMART+ app. Manually added devices move freely.",
+            ],
+            Tip = "The SMART+ app keeps house, room and device names in LEDVANCE's own cloud, which has no public API, and Matter bulbs don't store them — so set them here once. New devices (Matter pairing, manual add) join the house selected in the sidebar.",
+        },
+
+        ["Settings.Matter"] = new()
+        {
+            Title = "Matter over Wi-Fi",
+            Intro = "Control Matter bulbs (e.g. LEDVANCE / OSRAM SMART+ Matter) directly from this PC over your local network — no hub, no cloud. The PC joins as an extra Matter controller ('multi-admin'), so the bulb keeps working in its current app.",
+            Steps =
+            [
+                "Install Node.js LTS from nodejs.org (the app runs its Matter controller with it), then restart this app.",
+                "Make sure the bulb is set up and working on your Wi-Fi in its current app, and that this PC is on the same network.",
+                "In the bulb's current app, open its Matter settings and choose to share / link it with another Matter app or controller. On Android this is also under Settings → Google → Devices & sharing → Matter devices → (bulb) → Linked apps → Link apps. A pairing code is shown and the bulb opens a pairing window for a few minutes.",
+                "Optional: click 'Find devices in pairing mode' — the bulb should be listed, and its IP is filled in for you.",
+                "Type the pairing code (11 or 21 digits, spaces/dashes are fine) and click 'Pair Matter device'. Pairing takes 10-60 seconds. The bulb is added to the house selected in the sidebar.",
+                "The bulb appears on the Devices page with status 'Online · Matter (LAN)'. Power, brightness, colour and white temperature work, and so do groups, scenes and schedules.",
+                "Factory-new bulb instead? Pair it to a phone app first (Matter set-up needs Bluetooth + Wi-Fi provisioning), then share it to this PC as above.",
+            ],
+            Tip = "Allow Node.js through the Windows firewall when asked (Matter uses mDNS on UDP 5353 and UDP 5540). Removing the device here also removes this PC from the bulb's Matter controllers. The PC's Matter identity is stored in the 'matter' folder next to the configuration file — keep it private.",
         },
 
         ["Settings.Appearance"] = new()
         {
             Title = "App settings",
-            Intro = "Appearance and start-up/close behaviour for the app.",
+            Intro = "Appearance, start-up/close behaviour, and backing up your settings.",
             Steps =
             [
                 "Theme — toggle between Light and Dark. Dark is the default; the choice applies immediately and is remembered.",
                 "Start minimized — when on, the app launches automatically at Windows sign-in and opens straight into the system tray (default: on).",
                 "Close to tray — when on, closing the window keeps the app running in the tray (so schedules keep firing) instead of exiting; use the tray icon's Exit to quit (default: on).",
+                "Backup ▸ Export settings… — saves houses, devices, groups, scenes, schedules and preferences to one .iscbackup file. Tick 'Keys & credentials' to include local keys and cloud sign-ins: they are then encrypted with a password you choose, which can't be recovered.",
+                "Backup ▸ Import settings… — pick a backup, check what it contains, enter its password and choose Merge (add and update, keep the rest) or Replace (use only what's in the file). The app restarts to apply it. Matter bulbs from another PC need pairing again.",
+                "Backup ▸ Undo last import — your settings are saved automatically before every import; this puts them back (the app restarts). 'Open safety copies folder' shows those copies.",
             ],
         },
 

@@ -280,7 +280,7 @@ public class LightAndCloudTests
         var path = Path.Combine(Path.GetTempPath(), $"ldv-test-{Guid.NewGuid():N}.json");
         try
         {
-            var store = new ConfigStore(path);
+            var store = TestStores.Create(path);
             var cfg = new AppConfig();
             cfg.Cloud.ClientSecret = "supersecret";
             cfg.Devices.Add(new DeviceConfig { Id = "a", LocalKey = "0123456789abcdef" });

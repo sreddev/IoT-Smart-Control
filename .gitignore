@@ -15,3 +15,11 @@ packaging/out/
 *.msixbundle
 *.cer
 *.pfx
+
+# Matter bridge (Node.js): dependencies and the generated bundle
+src/LedvanceControl.MatterBridge/node_modules/
+src/LedvanceControl.MatterBridge/dist/
+
+# Local-only: plain-text credentials and generated knowledge graph
+Credentials*.txt
+graphify-out/

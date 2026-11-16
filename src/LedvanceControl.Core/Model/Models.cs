@@ -32,26 +32,58 @@ public sealed class DeviceConfig
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public string? LocalKey { get; set; }
+    /// <summary>For sorting the masked key column by "has a key", without ordering by the secret itself.</summary>
+    [JsonIgnore] public bool HasLocalKey => !string.IsNullOrEmpty(LocalKey);
     public string? Ip { get; set; }
+    /// <summary>Numeric sort key for the IP column.</summary>
+    [JsonIgnore] public string IpSortKey => SortKeys.Ip(Ip);
     public string Version { get; set; } = "3.3";
     public string? Category { get; set; }
     public string? ProductId { get; set; }
     public string? ProductName { get; set; }
     public string? Room { get; set; }
+    /// <summary>The house (<see cref="HouseConfig.Id"/>) the device belongs to; <see cref="Room"/> is one of its rooms.</summary>
+    public string? HouseId { get; set; }
+    /// <summary>Tuya cloud home id (from the Tuya sync; not the app's house).</summary>
     public string? HomeId { get; set; }
     public string? Icon { get; set; }
     /// <summary>True when the device is reachable through the configured Tuya cloud project.</summary>
     public bool InCloud { get; set; }
     /// <summary>When set, this device is controlled through SmartThings (equals the SmartThings deviceId).</summary>
     public string? SmartThingsId { get; set; }
+    /// <summary>When set, this device is a Matter device paired with this PC (the Matter node id),
+    /// controlled directly over the LAN through the Matter bridge.</summary>
+    public string? MatterNodeId { get; set; }
+    /// <summary>The user renamed the device in this app: syncs keep <see cref="Name"/> as it is.</summary>
+    public bool NameEdited { get; set; }
+    /// <summary>The user assigned the room in this app: syncs keep <see cref="Room"/> as it is.</summary>
+    public bool RoomEdited { get; set; }
     public bool PreferLocal { get; set; } = true;
     public List<DpSchema> Schema { get; set; } = [];
+}
+
+/// <summary>
+/// A house (home): its rooms and, when it mirrors a cloud home, the SmartThings location / Tuya home it
+/// is linked to. Devices from a linked cloud always live in the matching house.
+/// </summary>
+public sealed class HouseConfig
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Name { get; set; } = "My home";
+    /// <summary>The user renamed the house in this app: syncs keep <see cref="Name"/>.</summary>
+    public bool NameEdited { get; set; }
+    public string? SmartThingsLocationId { get; set; }
+    public string? TuyaHomeId { get; set; }
+    /// <summary>Rooms of this house (kept even when empty). Names are unique within the house.</summary>
+    public List<string> Rooms { get; set; } = [];
 }
 
 /// <summary>A user defined group of devices controlled together.</summary>
 public sealed class GroupConfig
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    /// <summary>The house the group belongs to (its members are devices of that house).</summary>
+    public string? HouseId { get; set; }
     public string Name { get; set; } = "";
     public List<string> DeviceIds { get; set; } = [];
 }
@@ -125,8 +157,22 @@ public sealed class AppConfig
     public bool StartMinimized { get; set; } = true;
     /// <summary>Closing the window hides to the tray instead of exiting.</summary>
     public bool CloseToTray { get; set; } = true;
+    /// <summary>
+    /// Base64 AES-256 key that encrypts the Matter controller's storage (fabric keys, certificates,
+    /// paired nodes). Stored protected like every other secret (see ConfigStore).
+    /// </summary>
+    public string? MatterStorageKey { get; set; }
     public CloudSettings Cloud { get; set; } = new();
     public SmartThingsSettings SmartThings { get; set; } = new();
+    /// <summary>Houses (homes). Every device, room and group belongs to exactly one; there is always at least one.</summary>
+    public List<HouseConfig> Houses { get; set; } = [];
+    /// <summary>The house shown on the Devices / Rooms / Groups pages.</summary>
+    public string? CurrentHouseId { get; set; }
+
+    // Legacy (single-house) fields, read once to migrate older configs into Houses and never written again.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? HomeName { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? HomeNameEdited { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<string>? Rooms { get; set; }
     public List<DeviceConfig> Devices { get; set; } = [];
     public List<GroupConfig> Groups { get; set; } = [];
     public List<LocalScene> Scenes { get; set; } = [];

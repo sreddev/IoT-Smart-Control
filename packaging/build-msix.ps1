@@ -14,16 +14,23 @@
 .PARAMETER Runtime     win-x64 (default) or win-arm64.
 .PARAMETER Sign        Also sign with a self-signed cert (local testing only).
 .PARAMETER Install     Implies -Sign; trusts the cert and installs the package.
+.PARAMETER NodeDir     Folder holding node.exe (+ LICENSE) to bundle as matter-bridge\node, so Matter
+                        works without a separate Node.js install.
 
 .EXAMPLE
   pwsh packaging/build-msix.ps1                 # unsigned .msix for Store upload
   pwsh packaging/build-msix.ps1 -Sign           # signed .msix for local sideload
+  pwsh packaging/build-msix.ps1 -Sign -Version 2.5.0.0   # sideload package numbered like the app
 #>
 [CmdletBinding()]
 param(
     [ValidateSet('win-x64', 'win-arm64')] [string]$Runtime = 'win-x64',
     [switch]$Sign,
-    [switch]$Install
+    [switch]$Install,
+    [string]$NodeDir,
+    # Package version for this build only (w.x.y.0). Default: AppxManifest.xml, which holds the
+    # Microsoft Store version (the Store numbers its packages independently of the app version).
+    [string]$Version
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,11 +43,17 @@ $stage   = Join-Path $pkgDir 'obj/stage'
 $outDir  = Join-Path $pkgDir 'out'
 $arch    = if ($Runtime -eq 'win-arm64') { 'arm64' } else { 'x64' }
 
-# Version + Publisher are read straight from the manifest so there is one source of truth.
+# Version + Publisher come from the manifest (the Store version); -Version overrides it for this build.
 [xml]$manifest = Get-Content (Join-Path $pkgDir 'AppxManifest.xml')
+if ($Version) {
+    if ($Version -notmatch '^\d+\.\d+\.\d+\.0$') { throw "-Version must look like w.x.y.0 (the Store requires a 0 revision)." }
+    $manifest.Package.Identity.Version = $Version
+}
 $version   = $manifest.Package.Identity.Version
 $publisher = $manifest.Package.Identity.Publisher
-$msixPath  = Join-Path $outDir "IoTSmartControl_${version}_${arch}.msix"
+# unsigned packages are for Partner Center upload; name them so they are never mistaken for a sideload build
+$suffix    = if ($Sign) { '' } else { '_store-upload' }
+$msixPath  = Join-Path $outDir "IoTSmartControl_${version}_${arch}${suffix}.msix"
 
 Write-Host "==> Publishing $Runtime (self-contained)…" -ForegroundColor Cyan
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
@@ -51,8 +64,14 @@ New-Item -ItemType Directory -Force -Path $stage, $outDir | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed.' }
 
 Write-Host "==> Staging manifest + visual assets…" -ForegroundColor Cyan
-Copy-Item (Join-Path $pkgDir 'AppxManifest.xml') $stage -Force
+$manifest.Save((Join-Path $stage 'AppxManifest.xml'))   # with the version of this build
 Copy-Item (Join-Path $pkgDir 'Images') $stage -Recurse -Force
+if ($NodeDir) {
+    # bundled Node.js runtime for the Matter bridge (the app prefers matter-bridge\node\node.exe)
+    $nodeDest = Join-Path $stage 'matter-bridge/node'
+    New-Item -ItemType Directory -Force -Path $nodeDest | Out-Null
+    Copy-Item (Join-Path $NodeDir '*') $nodeDest -Force
+}
 # MSIX cannot contain a .pdb-only app; keep the folder lean.
 Get-ChildItem $stage -Filter *.pdb -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
 
@@ -77,7 +96,11 @@ if ($Sign) {
     if (-not $signtool) { throw 'signtool.exe not found.' }
     $cerPath = Join-Path $outDir 'IoTSmartControl-Test.cer'
 
-    $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq $publisher } | Select-Object -First 1
+    # Only the self-signed test certificate this script creates: another certificate with the same subject
+    # (e.g. one on a smart card) would make signtool ask for the card's PIN.
+    $cert = Get-ChildItem Cert:\CurrentUser\My |
+        Where-Object { $_.Subject -eq $publisher -and $_.FriendlyName -eq 'IoT Smart Control (test)' -and $_.HasPrivateKey } |
+        Sort-Object NotAfter -Descending | Select-Object -First 1
     if (-not $cert) {
         Write-Host "==> Creating self-signed test certificate ($publisher)…" -ForegroundColor Cyan
         $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject $publisher `

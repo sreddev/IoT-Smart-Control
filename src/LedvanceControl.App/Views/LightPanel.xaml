@@ -27,6 +27,8 @@
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Setter Property="Text" Value="Off" />
+                            <!-- this local style replaces the theme's implicit TextBlock style, so set the colour here -->
+                            <Setter Property="Foreground" Value="{DynamicResource TextMain}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsOn}" Value="True">
                                     <Setter Property="Text" Value="On" />
