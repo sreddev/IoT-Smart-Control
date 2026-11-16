@@ -82,7 +82,7 @@
                         </StackPanel>
                     </RadioButton>
                 </StackPanel>
-                <TextBlock DockPanel.Dock="Bottom" Text="Unofficial client · Tuya LAN + OpenAPI · SmartThings" Foreground="#6B7380" FontSize="11"
+                <TextBlock DockPanel.Dock="Bottom" Text="Unofficial client · Tuya LAN + OpenAPI · Matter · SmartThings" Foreground="#6B7380" FontSize="11"
                            Margin="22,0,10,16" VerticalAlignment="Bottom" TextWrapping="Wrap" />
                 <Grid />
             </DockPanel>

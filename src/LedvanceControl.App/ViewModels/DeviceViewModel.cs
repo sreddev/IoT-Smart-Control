@@ -15,10 +15,18 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
     private bool _isOn;
     private bool _suppress;
     private bool _isSelected;
+    private bool _isEditing;
+    private string _editName = "";
+    private string _editRoom = "";
+    private readonly DeviceManager _manager;
 
-    public DeviceViewModel(DeviceRuntime runtime)
+    public DeviceViewModel(DeviceRuntime runtime, DeviceManager manager)
     {
         Runtime = runtime;
+        _manager = manager;
+        EditCommand = new RelayCommand(BeginEdit);
+        SaveEditCommand = new RelayCommand(SaveEdit, _ => !string.IsNullOrWhiteSpace(EditName));
+        CancelEditCommand = new RelayCommand(() => IsEditing = false);
         Light = new LightControlViewModel(this);
         Energy = new EnergyViewModel(runtime);
         RefreshCommand = new AsyncCommand(() => Runtime.RefreshAsync());
@@ -47,6 +55,54 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
     public ICommand RefreshCommand { get; }
     public ICommand DiagnosticsCommand { get; }
 
+    // ---------------------------------------------------------------- rename / room
+
+    public ICommand EditCommand { get; }
+    public ICommand SaveEditCommand { get; }
+    public ICommand CancelEditCommand { get; }
+
+    public bool IsEditing { get => _isEditing; set => Set(ref _isEditing, value); }
+    public string EditName { get => _editName; set => Set(ref _editName, value); }
+    /// <summary>Room typed or picked in the editable combo box; blank = no room.</summary>
+    public string EditRoom { get => _editRoom; set => Set(ref _editRoom, value); }
+    public IReadOnlyList<string> KnownRooms => _manager.KnownRooms;
+
+    /// <summary>Where the name/room came from, shown under the editor.</summary>
+    public string NameSourceHint =>
+        Runtime.Config.NameEdited || Runtime.Config.RoomEdited
+            ? "Edited in this app — syncs won't overwrite your name/room."
+            : Runtime.Config.SmartThingsId != null ? "Name and room come from SmartThings until you change them here."
+            : Runtime.Config.InCloud ? "Name and room come from the Tuya cloud until you change them here."
+            : Runtime.Config.MatterNodeId != null ? "Matter bulbs don't carry the name/room set in their phone app — set them here."
+            : "Set the name and room shown in this app.";
+
+    private void BeginEdit()
+    {
+        EditName = Runtime.Config.Name;
+        EditRoom = Runtime.Config.Room ?? "";
+        OnPropertyChanged(nameof(KnownRooms));
+        OnPropertyChanged(nameof(NameSourceHint));
+        IsEditing = true;
+    }
+
+    private void SaveEdit()
+    {
+        try
+        {
+            var renamed = EditName.Trim() != Runtime.Config.Name;
+            var newRoom = string.IsNullOrWhiteSpace(EditRoom) ? null : EditRoom.Trim();
+            var moved = !string.Equals(newRoom, Runtime.Config.Room, StringComparison.CurrentCultureIgnoreCase);
+            IsEditing = false;
+            if (renamed) _manager.RenameDevice(Id, EditName);
+            if (moved) _manager.SetDeviceRoom(Id, newRoom);
+            if (renamed || moved) Status.Info($"Saved '{Name}' in {Room}");
+        }
+        catch (Exception ex)
+        {
+            Status.Error(ex);
+        }
+    }
+
     /// <summary>Used by checklists (groups, scene capture).</summary>
     public bool IsSelected
     {
@@ -64,7 +120,7 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
     };
 
     public string StatusText => Runtime.Online
-        ? Runtime.LastTransport switch { Transport.Lan => "Online · LAN", Transport.Cloud => "Online · Cloud", Transport.SmartThings => "Online · SmartThings", _ => "Online" }
+        ? Runtime.LastTransport switch { Transport.Lan => "Online · LAN", Transport.Cloud => "Online · Cloud", Transport.SmartThings => "Online · SmartThings", Transport.Matter => "Online · Matter (LAN)", _ => "Online" }
         : Runtime.LastError != null ? "Offline · " + Runtime.LastError : "Not refreshed";
 
     public bool IsOnline => Runtime.Online;

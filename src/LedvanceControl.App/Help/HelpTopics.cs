@@ -23,11 +23,12 @@ public static class HelpTopics
             Intro = "Control your lights and plugs. Devices are grouped by room on the left; selecting one opens its panel on the right.",
             Steps =
             [
-                "Pick a device in the left list. Under its name a status line shows how it is reached: Online · LAN (direct, local), Online · Cloud (via Tuya), Online · SmartThings, or Offline with the reason.",
+                "Pick a device in the left list. Under its name a status line shows how it is reached: Online · LAN (direct, local), Online · Cloud (via Tuya), Online · SmartThings, Online · Matter (LAN), or Offline with the reason.",
                 "Flip the switch on a card — or in the panel header — to turn a device on or off. 'All off' at the top turns everything off at once.",
                 "For lights, use the panel tabs: White (brightness + colour temperature), Colour (hue / saturation / brightness plus quick colours) and Scenes (the 8 built-in Tuya light effects).",
                 "For energy-monitoring plugs, an Energy monitor panel shows live power draw (W), voltage (V), current (A) and total energy (kWh). It appears only when the device actually reports metering.",
                 "Refresh re-reads the current state. Diagnostics runs connectivity checks and reports exactly how the device is reached.",
+                "Edit renames the device or moves it to another room: pick a room from the list or type a new one (leave it empty for 'No room'), then Save or press Enter. Your name and room are kept even when SmartThings / Tuya / Matter devices are synchronised again.",
                 "The Data points card lists every raw function the device exposes; read-only values such as voltage are shown on the right.",
             ],
             Tip = "Control prefers your local network (LAN) whenever an IP address and 16-character local key are known, and falls back to the cloud otherwise.",
@@ -82,12 +83,45 @@ public static class HelpTopics
             [
                 "App settings — theme, start-minimized (autostart to tray) and close-to-tray.",
                 "Tuya cloud project — link your Tuya account to import devices, local keys and schemas (this enables local LAN control).",
+                "Matter over Wi-Fi — pair Matter bulbs straight to this PC and control them over the LAN, with no hub.",
                 "SmartThings — connect bulbs that are brand-locked to LEDVANCE but visible in Samsung SmartThings.",
                 "Local network — discover device IP addresses for LAN control, or import a tinytuya devices.json.",
                 "Devices — edit names, rooms and connection details for each known device.",
                 "Add a device manually — enter a device's id, key, IP and type by hand.",
             ],
-            Tip = "You usually need only one connection route per device: Tuya for full local control, or SmartThings for brand-locked bulbs.",
+            Tip = "You usually need only one connection route per device: Tuya or Matter for local control, or SmartThings for brand-locked bulbs.",
+        },
+
+        ["Settings.Rooms"] = new()
+        {
+            Title = "Rooms",
+            Intro = "Rooms group the device list on the Devices page.",
+            Steps =
+            [
+                "Rooms are imported automatically when you synchronise SmartThings or the Tuya cloud, and stay in the list even when empty.",
+                "Add room — type a name and click 'Add room'.",
+                "Rename selected — pick a room, type the new name, click 'Rename selected'. Its devices move along.",
+                "Delete selected — removes the room; its devices go to 'No room'.",
+                "To put a device in a room, open it on the Devices page and click Edit (or edit the Room column in the Devices table above and click Apply changes).",
+            ],
+            Tip = "Matter bulbs don't carry the name or room you gave them in their phone app (the LEDVANCE SMART+ app keeps those in its own cloud), so name them and assign rooms here once.",
+        },
+
+        ["Settings.Matter"] = new()
+        {
+            Title = "Matter over Wi-Fi",
+            Intro = "Control Matter bulbs (e.g. LEDVANCE / OSRAM SMART+ Matter) directly from this PC over your local network — no hub, no cloud. The PC joins as an extra Matter controller ('multi-admin'), so the bulb keeps working in its current app.",
+            Steps =
+            [
+                "Install Node.js LTS from nodejs.org (the app runs its Matter controller with it), then restart this app.",
+                "Make sure the bulb is set up and working on your Wi-Fi in its current app, and that this PC is on the same network.",
+                "In the bulb's current app, open its Matter settings and choose to share / link it with another Matter app or controller. On Android this is also under Settings → Google → Devices & sharing → Matter devices → (bulb) → Linked apps → Link apps. A pairing code is shown and the bulb opens a pairing window for a few minutes.",
+                "Optional: click 'Find devices in pairing mode' — the bulb should be listed, and its IP is filled in for you.",
+                "Type the pairing code (11 or 21 digits, spaces/dashes are fine) and click 'Pair Matter device'. Pairing takes 10-60 seconds.",
+                "The bulb appears on the Devices page with status 'Online · Matter (LAN)'. Power, brightness, colour and white temperature work, and so do groups, scenes and schedules.",
+                "Factory-new bulb instead? Pair it to a phone app first (Matter set-up needs Bluetooth + Wi-Fi provisioning), then share it to this PC as above.",
+            ],
+            Tip = "Allow Node.js through the Windows firewall when asked (Matter uses mDNS on UDP 5353 and UDP 5540). Removing the device here also removes this PC from the bulb's Matter controllers. The PC's Matter identity is stored in the 'matter' folder next to the configuration file — keep it private.",
         },
 
         ["Settings.Appearance"] = new()

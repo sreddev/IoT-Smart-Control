@@ -29,5 +29,35 @@
     <Resource Include="Assets\app-icon.png" />
   </ItemGroup>
 
+  <!--
+    Matter bridge: a Node.js sidecar (src/LedvanceControl.MatterBridge) bundled by esbuild into one
+    file and shipped as matter-bridge\bridge.mjs. Building it needs Node.js + npm; without them the
+    app still builds and runs, only Matter is unavailable. Pass -p:SkipMatterBridge=true to skip.
+  -->
+  <PropertyGroup>
+    <MatterBridgeDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\LedvanceControl.MatterBridge\'))</MatterBridgeDir>
+    <MatterBridgeBundle>$(MatterBridgeDir)dist\bridge.mjs</MatterBridgeBundle>
+  </PropertyGroup>
+
+  <Target Name="BuildMatterBridge" BeforeTargets="AssignTargetPaths" Condition="'$(SkipMatterBridge)' != 'true'"
+          Inputs="$(MatterBridgeDir)bridge.mjs;$(MatterBridgeDir)build.mjs;$(MatterBridgeDir)package-lock.json"
+          Outputs="$(MatterBridgeBundle)">
+    <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="$(MatterBridgeDir)"
+          Condition="!Exists('$(MatterBridgeDir)node_modules\esbuild')" ContinueOnError="true" />
+    <Exec Command="npm run build" WorkingDirectory="$(MatterBridgeDir)" ContinueOnError="true" />
+  </Target>
+
+  <Target Name="IncludeMatterBridge" AfterTargets="BuildMatterBridge" BeforeTargets="AssignTargetPaths">
+    <ItemGroup Condition="Exists('$(MatterBridgeBundle)')">
+      <None Include="$(MatterBridgeBundle)" Link="matter-bridge\bridge.mjs"
+            CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+      <None Include="$(MatterBridgeBundle).LEGAL.txt" Link="matter-bridge\THIRD-PARTY-NOTICES.txt"
+            CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"
+            Condition="Exists('$(MatterBridgeBundle).LEGAL.txt')" />
+    </ItemGroup>
+    <Warning Condition="!Exists('$(MatterBridgeBundle)') And '$(SkipMatterBridge)' != 'true'"
+             Text="Matter bridge not built (Node.js/npm missing?). The app will run without Matter support." />
+  </Target>
+
 </Project>
 

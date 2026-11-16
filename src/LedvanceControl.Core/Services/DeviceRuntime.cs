@@ -7,7 +7,7 @@ using LedvanceControl.Core.Model;
 
 namespace LedvanceControl.Core.Services;
 
-public enum Transport { None, Lan, Cloud, SmartThings }
+public enum Transport { None, Lan, Cloud, SmartThings, Matter }
 
 /// <summary>
 /// Live state of one device plus the logic that chooses LAN or cloud to talk to it.
@@ -38,6 +38,7 @@ public sealed class DeviceRuntime : IAsyncDisposable
     public bool CanUseLan => !string.IsNullOrEmpty(Config.Ip) && Config.LocalKey is { Length: 16 };
     public bool CanUseCloud => Config.InCloud && _manager.Cloud != null;
     public bool CanUseSmartThings => Config.SmartThingsId != null && _manager.SmartThings != null;
+    public bool IsMatter => Config.MatterNodeId != null;
 
     /// <summary>Raised on any state change (worker thread).</summary>
     public event Action<DeviceRuntime>? Changed;
@@ -67,6 +68,21 @@ public sealed class DeviceRuntime : IAsyncDisposable
 
     public async Task RefreshAsync(CancellationToken ct = default)
     {
+        if (IsMatter)
+        {
+            try
+            {
+                var info = await RequireMatter().GetAsync(Config.MatterNodeId!, ct);
+                if (info.Connected && info.State != null) ApplyMatterState(info.State);
+                else ApplyMatterConnection("disconnected");
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                SetError(ex);
+            }
+            return;
+        }
+
         if (CanUseSmartThings)
         {
             try
@@ -118,6 +134,23 @@ public sealed class DeviceRuntime : IAsyncDisposable
 
     public async Task SetAsync(IReadOnlyDictionary<string, object?> byCode, CancellationToken ct = default)
     {
+        if (IsMatter)
+        {
+            var command = MatterMapping.CodesToCommand(byCode);
+            if (command.Count == 0) return;
+            try
+            {
+                await RequireMatter().SetAsync(Config.MatterNodeId!, command, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                SetError(ex);
+                throw;
+            }
+            ApplyValues(byCode, Transport.Matter);
+            return;
+        }
+
         if (CanUseSmartThings)
         {
             var commands = SmartThingsMapping.CodesToCommands(byCode);
@@ -166,6 +199,37 @@ public sealed class DeviceRuntime : IAsyncDisposable
         var sb = new StringBuilder();
         sb.AppendLine($"Device: {Config.Name}");
         sb.AppendLine($"Id: {Config.Id}");
+
+        if (IsMatter)
+        {
+            sb.AppendLine($"Channel: Matter over the LAN (node {Config.MatterNodeId})");
+            try
+            {
+                var bridge = RequireMatter();
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var info = await bridge.GetAsync(Config.MatterNodeId!, ct);
+                sw.Stop();
+                sb.AppendLine($"Product: {info.VendorName} {info.ProductName} (firmware {info.SoftwareVersion})");
+                if (info.SerialNumber != null) sb.AppendLine($"Serial: {info.SerialNumber}");
+                sb.AppendLine($"Session: {(info.Connected ? "connected" : "not connected")}, read in {sw.ElapsedMilliseconds} ms");
+                if (info.Capabilities is { } c)
+                    sb.AppendLine($"Capabilities: on/off{(c.Level ? ", dimming" : "")}{(c.Hs ? ", hue/saturation" : "")}{(c.Xy ? ", XY colour" : "")}{(c.Ct ? $", white {c.CtMinKelvin}-{c.CtMaxKelvin} K" : "")}");
+                if (info.State is { } s)
+                {
+                    sb.AppendLine("Current values:");
+                    foreach (var (code, value) in MatterMapping.StateToCodes(s, Config.Schema))
+                        sb.AppendLine($"  {code} = {value}");
+                    ApplyMatterState(s);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                sb.AppendLine("ERROR: " + ex.Message);
+                if (_manager.Matter?.RecentLog() is { Length: > 0 } log)
+                    sb.AppendLine().AppendLine("Bridge log (most recent):").AppendLine(log);
+            }
+            return sb.ToString();
+        }
 
         if (CanUseSmartThings)
         {
@@ -238,6 +302,29 @@ public sealed class DeviceRuntime : IAsyncDisposable
         if (_local != null) await _local.DisposeAsync();
         _local = null;
     }
+
+    // ---------------------------------------------------------------- Matter
+
+    /// <summary>Applies state pushed by (or read from) the Matter bridge.</summary>
+    internal void ApplyMatterState(MatterLightState state) =>
+        ApplyValues(MatterMapping.StateToCodes(state, Config.Schema), Transport.Matter);
+
+    /// <summary>Reflects a Matter session change ("connected", "disconnected", "reconnecting", …).</summary>
+    internal void ApplyMatterConnection(string status)
+    {
+        switch (status)
+        {
+            case "disconnected" or "waiting":
+                SetError(new MatterException("Not reachable over Matter (bulb powered off or not on Wi-Fi)."));
+                break;
+            case "decommissioned":
+                SetError(new MatterException("This PC was removed from the device's Matter fabric. Pair it again."));
+                break;
+        }
+    }
+
+    private MatterBridgeClient RequireMatter() => _manager.Matter
+        ?? throw new MatterException("Matter needs Node.js (nodejs.org, LTS). Install it and restart the app.");
 
     // ---------------------------------------------------------------- internals
 

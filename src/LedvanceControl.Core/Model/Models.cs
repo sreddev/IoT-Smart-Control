@@ -44,6 +44,13 @@ public sealed class DeviceConfig
     public bool InCloud { get; set; }
     /// <summary>When set, this device is controlled through SmartThings (equals the SmartThings deviceId).</summary>
     public string? SmartThingsId { get; set; }
+    /// <summary>When set, this device is a Matter device paired with this PC (the Matter node id),
+    /// controlled directly over the LAN through the Matter bridge.</summary>
+    public string? MatterNodeId { get; set; }
+    /// <summary>The user renamed the device in this app: syncs keep <see cref="Name"/> as it is.</summary>
+    public bool NameEdited { get; set; }
+    /// <summary>The user assigned the room in this app: syncs keep <see cref="Room"/> as it is.</summary>
+    public bool RoomEdited { get; set; }
     public bool PreferLocal { get; set; } = true;
     public List<DpSchema> Schema { get; set; } = [];
 }
@@ -127,6 +134,8 @@ public sealed class AppConfig
     public bool CloseToTray { get; set; } = true;
     public CloudSettings Cloud { get; set; } = new();
     public SmartThingsSettings SmartThings { get; set; } = new();
+    /// <summary>Known rooms: imported from SmartThings / Tuya syncs and created by the user (kept even when empty).</summary>
+    public List<string> Rooms { get; set; } = [];
     public List<DeviceConfig> Devices { get; set; } = [];
     public List<GroupConfig> Groups { get; set; } = [];
     public List<LocalScene> Scenes { get; set; } = [];

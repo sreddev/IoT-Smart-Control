@@ -21,6 +21,9 @@ public sealed class SettingsViewModel : ObservableObject
     private string _stRedirect;
     private string _stManualCode = "";
     private string _stStatus;
+    private string _matterCode = "";
+    private string _matterIp = "";
+    private string _matterStatus;
 
     public SettingsViewModel(MainViewModel main)
     {
@@ -47,6 +50,11 @@ public sealed class SettingsViewModel : ObservableObject
         OpenStSignInCommand = new RelayCommand(OpenStSignIn, _ => StReady);
         ConnectStManualCommand = new AsyncCommand(ConnectStManualAsync, _ => StReady && !string.IsNullOrWhiteSpace(StManualCode));
         SyncStCommand = new AsyncCommand(SyncStAsync, _ => _main.Manager.SmartThings?.HasToken == true);
+
+        _matterStatus = MatterIdleStatus();
+        PairMatterCommand = new AsyncCommand(PairMatterAsync, _ => MatterAvailable && !string.IsNullOrWhiteSpace(MatterCode));
+        SyncMatterCommand = new AsyncCommand(SyncMatterAsync, _ => MatterAvailable);
+        FindMatterCommand = new AsyncCommand(FindMatterAsync, _ => MatterAvailable);
         ReloadDevices();
     }
 
@@ -86,12 +94,61 @@ public sealed class SettingsViewModel : ObservableObject
     public ICommand ConnectStManualCommand { get; }
     public ICommand SyncStCommand { get; }
 
+    // Matter
+    public bool MatterAvailable => _main.Manager.Matter != null;
+    /// <summary>11/21-digit manual pairing code or the MT:… QR payload.</summary>
+    public string MatterCode { get => _matterCode; set => Set(ref _matterCode, value); }
+    /// <summary>Optional: the bulb's IP, to skip discovery.</summary>
+    public string MatterIp { get => _matterIp; set => Set(ref _matterIp, value); }
+    public string MatterStatus { get => _matterStatus; set => Set(ref _matterStatus, value); }
+    public ObservableCollection<MatterCommissionableDevice> MatterDiscovered { get; } = [];
+    public ICommand PairMatterCommand { get; }
+    public ICommand SyncMatterCommand { get; }
+    public ICommand FindMatterCommand { get; }
+
     public string ConfigPath => _main.Manager.ConfigPath;
+
+    // Rooms
+    private string? _selectedRoom;
+    private string _roomName = "";
+    public ObservableCollection<string> Rooms { get; } = [];
+    public string? SelectedRoom
+    {
+        get => _selectedRoom;
+        set { if (Set(ref _selectedRoom, value) && value != null) RoomName = value; }
+    }
+    /// <summary>Text box used both for a new room and as the new name when renaming the selected one.</summary>
+    public string RoomName { get => _roomName; set => Set(ref _roomName, value); }
+    public ICommand AddRoomCommand => _addRoom ??= new RelayCommand(() => RoomAction(() => _main.Manager.AddRoom(RoomName), $"Added room '{RoomName.Trim()}'"),
+        _ => !string.IsNullOrWhiteSpace(RoomName));
+    public ICommand RenameRoomCommand => _renameRoom ??= new RelayCommand(() => RoomAction(() => _main.Manager.RenameRoom(SelectedRoom!, RoomName), $"Renamed room to '{RoomName.Trim()}'"),
+        _ => SelectedRoom != null && !string.IsNullOrWhiteSpace(RoomName) && RoomName.Trim() != SelectedRoom);
+    public ICommand DeleteRoomCommand => _deleteRoom ??= new RelayCommand(() => RoomAction(() => _main.Manager.DeleteRoom(SelectedRoom!), $"Deleted room '{SelectedRoom}'; its devices now have no room"),
+        _ => SelectedRoom != null);
+    private ICommand? _addRoom, _renameRoom, _deleteRoom;
+
+    private void RoomAction(Action action, string done)
+    {
+        try
+        {
+            action();
+            RoomName = "";
+            ReloadDevices();
+            Status.Info(done);
+        }
+        catch (Exception ex) { Status.Error(ex); }
+    }
+
+    /// <summary>Name/room per device as last loaded, to detect edits made in the table.</summary>
+    private Dictionary<string, (string Name, string? Room)> _loaded = [];
 
     public void ReloadDevices()
     {
         DeviceConfigs.Clear();
         foreach (var d in _main.Manager.Config.Devices) DeviceConfigs.Add(d);
+        _loaded = _main.Manager.Config.Devices.ToDictionary(d => d.Id, d => (d.Name, d.Room));
+        Rooms.Clear();
+        foreach (var r in _main.Manager.KnownRooms) Rooms.Add(r);
     }
 
     private void SaveCloud()
@@ -156,8 +213,17 @@ public sealed class SettingsViewModel : ObservableObject
 
     private void SaveDevices()
     {
+        // names/rooms edited in the table are pinned so later syncs don't overwrite them
+        foreach (var d in DeviceConfigs)
+        {
+            if (!_loaded.TryGetValue(d.Id, out var before)) continue;
+            d.Room = string.IsNullOrWhiteSpace(d.Room) ? null : d.Room.Trim();
+            if (d.Name != before.Name) d.NameEdited = true;
+            if (!string.Equals(d.Room, before.Room, StringComparison.CurrentCulture)) d.RoomEdited = true;
+        }
         // re-create runtimes so connection parameters (ip/key/version) take effect
         foreach (var d in DeviceConfigs.ToList()) _main.Manager.AddOrUpdate(d);
+        ReloadDevices();
         Status.Info("Device settings saved");
         _ = _main.RefreshAllAsync();
     }
@@ -224,5 +290,55 @@ public sealed class SettingsViewModel : ObservableObject
         await _main.Manager.SyncFromSmartThingsAsync(progress);
         ReloadDevices();
         await _main.RefreshAllAsync();
+    }
+
+    // ---------------------------------------------------------------- Matter
+
+    private string MatterIdleStatus()
+    {
+        if (!MatterAvailable) return "Node.js not found. Install Node.js LTS (nodejs.org) and restart the app.";
+        var n = _main.Manager.Config.Devices.Count(d => d.MatterNodeId != null);
+        return n == 0 ? "Ready · no Matter devices paired yet" : $"Ready · {n} Matter device(s) paired";
+    }
+
+    private async Task PairMatterAsync()
+    {
+        var progress = new Progress<string>(s => { MatterStatus = s; Status.Info(s); });
+        try
+        {
+            var rt = await _main.Manager.PairMatterAsync(MatterCode, string.IsNullOrWhiteSpace(MatterIp) ? null : MatterIp, progress);
+            MatterCode = "";
+            MatterIp = "";
+            ReloadDevices();
+            MatterStatus = $"Paired '{rt.Config.Name}'. " + MatterIdleStatus();
+        }
+        catch
+        {
+            MatterStatus = "Pairing failed: check the code is fresh (pairing windows close after a few minutes) and the PC is on the same Wi-Fi/LAN.";
+            throw;
+        }
+    }
+
+    private async Task SyncMatterAsync()
+    {
+        var progress = new Progress<string>(s => { MatterStatus = s; Status.Info(s); });
+        await _main.Manager.SyncMatterAsync(progress);
+        ReloadDevices();
+        await _main.RefreshAllAsync();
+    }
+
+    private async Task FindMatterAsync()
+    {
+        MatterDiscovered.Clear();
+        MatterStatus = "Looking for Matter devices in pairing mode (8 s)…";
+        var found = await _main.Manager.DiscoverMatterAsync(TimeSpan.FromSeconds(8));
+        foreach (var f in found) MatterDiscovered.Add(f);
+        MatterStatus = found.Count == 0
+            ? "No device has a pairing window open. Open one in the bulb's current app (share / link with another Matter app), then search again."
+            : $"{found.Count} device(s) ready to pair. Enter the pairing code and press Pair.";
+        // prefer an IPv4 "a.b.c.d:port" address; link-local IPv6 needs a scope id the user can't easily supply
+        if (found.Count == 1 && string.IsNullOrWhiteSpace(MatterIp) &&
+            found[0].Addresses.FirstOrDefault(a => a.Count(ch => ch == ':') == 1 && a.Contains('.')) is { } v4)
+            MatterIp = v4;
     }
 }

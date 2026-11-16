@@ -6,7 +6,7 @@
 
 <p align="center">
   An unofficial Windows desktop app (C# / .NET 10 / WPF) for LEDVANCE SMART+ WiFi lights and plugs —
-  controlled locally over your Wi-Fi, through the Tuya cloud, or through Samsung SmartThings.
+  controlled locally over your Wi-Fi (Tuya LAN or Matter), through the Tuya cloud, or through Samsung SmartThings.
 </p>
 
 It brings the day-to-day features of the **LEDVANCE SMART+ WiFi Android app** (v1.3.2) to Windows as a native,
@@ -43,14 +43,15 @@ so the connectivity and setup instructions below are also available inside the a
 
 | Smart+ Android app | This app |
 |---|---|
-| Device list grouped by room, on/off | **Devices** page grouped by room, quick toggles, live LAN / Cloud / SmartThings / Offline status |
+| Device list grouped by room, on/off | **Devices** page grouped by room, quick toggles, live LAN / Cloud / SmartThings / Matter / Offline status; **Edit** renames a device or moves it to another room |
 | Light panel | Power, white mode (brightness, colour temperature), colour mode (hue / saturation / brightness, quick colours) and the 8 built-in Tuya light scenes (Night, Reading, …) |
 | Socket / plug panel | **Energy monitor**: live power draw (W), voltage (V), current (A) and cumulative energy (kWh), read from the plug's metering DPs — plus the plug on/off switch |
 | Generic device panels | Every data point (DP) rendered from the device schema: switches, sliders, drop-downs, text; read-only values (power, voltage, …) shown too |
 | Groups | **Groups**: user-defined groups controlled together (power, brightness, colour, scenes) |
 | Scenes / tap-to-run | **Scenes**: local scenes captured from current device states, plus cloud scenes (run) and cloud automations (enable/disable) |
 | Timers / schedules | **Schedules**: daily / weekday timers for a device, group or scene, optional brightness; the app stays in the tray while schedules are enabled |
-| Account / home | **Settings**: appearance, Tuya cloud sync, SmartThings connect/sync, LAN discovery, tinytuya import, manual devices, per-device connection details |
+| Account / home | **Settings**: appearance, Tuya cloud sync, Matter pairing, SmartThings connect/sync, LAN discovery, tinytuya import, manual devices, per-device connection details |
+| — | **Matter over Wi-Fi**: pair Matter bulbs (e.g. SMART+ Matter RGBW) straight to the PC and control them over the LAN — no hub, no cloud (power, brightness, colour, white temperature; works with groups, scenes and schedules) |
 
 ### Not implemented
 
@@ -66,7 +67,7 @@ app once — this app then controls the devices:
 
 ## How it connects
 
-The app reaches your devices by three routes and prefers the local one automatically:
+The app reaches your devices by four routes and prefers the local ones automatically:
 
 1. **Tuya LAN protocol** (3.1 / 3.3 / 3.4 / 3.5) — direct, cloud-free control over your Wi-Fi. Needs each
    device's **local key** (from the Tuya cloud sync or a tinytuya import) and its IP.
@@ -74,6 +75,10 @@ The app reaches your devices by three routes and prefers the local one automatic
    also the fallback channel when a device isn't reachable on the LAN.
 3. **Samsung SmartThings** (OAuth 2.0 REST) — for bulbs **brand-locked to LEDVANCE** that can't be re-paired to
    Tuya/Smart Life but are visible in SmartThings. On/off, brightness, colour and colour-temperature.
+4. **Matter over Wi-Fi** — direct, cloud-free and hub-free control of Matter bulbs on your LAN. The PC joins the
+   bulb as an extra Matter controller (multi-admin), so it keeps working in its current app. Runs a small
+   [matter.js](https://github.com/project-chip/matter.js) controller as a Node.js sidecar (needs Node.js LTS).
+   Matter-over-**Thread** bulbs are not reachable this way (a PC has no Thread radio) — they need a border router.
 
 > **Brand-locking.** LEDVANCE bulbs ship locked to the LEDVANCE app and won't pair to generic Tuya/Smart Life
 > (pairing fails at cloud registration), and Tuya→SmartThings linking is one-way. If your bulbs are in this
@@ -118,7 +123,19 @@ true local control); use **SmartThings** if your bulbs are brand-locked.
 5. Paste it into the app and click **Use code**, then **Sync SmartThings devices**. Status shows **Connected**
    and control runs through the SmartThings cloud (needs internet).
 
-### C) Already have tinytuya?
+### C) Matter bulbs over Wi-Fi — step by step (no hub)
+
+1. Install **Node.js LTS** from <https://nodejs.org> and restart the app.
+2. Keep the bulb working on your Wi-Fi in its current app, with the PC on the same network.
+3. In that app, open the bulb's Matter settings and share / link it with another Matter app. On Android this is
+   also under **Settings → Google → Devices & sharing → Matter devices → (bulb) → Linked apps → Link apps**.
+   A pairing code appears and the bulb opens a pairing window for a few minutes.
+4. In this app: **Settings → Matter over Wi-Fi** → optionally **Find devices in pairing mode** (fills in the IP),
+   type the code and click **Pair Matter device**. The bulb shows up as **Online · Matter (LAN)**.
+
+Allow Node.js through the Windows firewall when asked (mDNS on UDP 5353, Matter on UDP 5540).
+
+### D) Already have tinytuya?
 
 If you ran `python -m tinytuya wizard` before and have a `devices.json`, skip the cloud setup:
 **Settings → Local network → Import tinytuya devices.json…**, then **Discover devices**.
@@ -130,6 +147,10 @@ Every section on the **Settings** page (Appearance and Credits aside):
 - **Tuya cloud project** — connect to your Tuya IoT project: pick the data centre, enter Access ID / Secret, and
   **Save & synchronise devices** to import devices, local keys, DP schemas, rooms, cloud scenes and automations.
   Optional; needed only for the Tuya route.
+- **Matter over Wi-Fi** — enter a Matter **pairing code** (11/21 digits or `MT:…`) and optionally the bulb's IP,
+  then **Pair Matter device**. **Find devices in pairing mode** lists bulbs with an open pairing window;
+  **Refresh Matter devices** re-reads the devices paired with this PC. Removing a Matter device in **Devices**
+  also removes this PC from the bulb's Matter controllers.
 - **SmartThings** — connect a SmartThings OAuth app (Client ID, Secret, Redirect URI). **Open sign-in page** →
   approve → paste the **code** → **Use code**, then **Sync SmartThings devices**. The connection status is shown
   here. Use this for bulbs that only live in SmartThings.
@@ -137,6 +158,8 @@ Every section on the **Settings** page (Appearance and Credits aside):
   6666/6667/7000) and fills in IP addresses and protocol versions of known devices; allow the app through the
   Windows firewall when asked. **Import tinytuya devices.json…** loads devices from a tinytuya export. Results
   appear in a table (device id, IP, version, product key).
+- **Rooms** — the rooms that group the Devices page: imported from SmartThings / Tuya syncs, plus your own; add,
+  rename or delete them. Names and rooms you set in this app are kept across later syncs.
 - **Devices** — edit names, rooms and connection details for every known device: IP address, protocol version,
   local key, and **LAN first** (use the local network when an IP and key are known). **Cloud** shows whether the
   device came from a cloud sync. **Apply changes** saves; **Remove selected** deletes a device.
@@ -154,6 +177,11 @@ dotnet run --project src/LedvanceControl.App
 Run `dotnet test` for the protocol tests (a simulated 3.3/3.4/3.5 device lives in
 `tests/LedvanceControl.Tests/FakeTuyaDevice.cs`).
 
+The Matter bridge (`src/LedvanceControl.MatterBridge`) is a Node.js script bundled with esbuild into a single
+`matter-bridge/bridge.mjs` next to the exe. The App build does this automatically (`npm ci` + `npm run build`)
+when Node.js/npm are installed; without them the app builds and runs, just without Matter. At run time the app
+uses `LEDVANCE_NODE`, a bundled `matter-bridge/node/node.exe`, or `node` on the PATH.
+
 ### MSIX / Microsoft Store
 
 The app can be packaged as a Store-ready `.msix` (full-trust desktop/Desktop Bridge, self-contained):
@@ -169,18 +197,22 @@ it satisfies, and the identity values to swap in before submission.
 Configuration is stored in `%APPDATA%\IoTSmartControl\config.json` (a config from an earlier build under
 `%APPDATA%\LedvanceControl` is migrated automatically on first run). The Tuya cloud secret, SmartThings client
 secret and refresh token, and device local keys are encrypted with Windows DPAPI for the current user.
-Set `LEDVANCE_CONFIG` to use a different file.
+Set `LEDVANCE_CONFIG` to use a different file. The PC's Matter controller identity (fabric keys and the list of
+paired bulbs) is stored by matter.js in the `matter` folder next to `config.json` — it is **not** DPAPI-encrypted,
+so keep that folder private.
 
 ## Project layout
 
 ```
 src/LedvanceControl.Core     protocol + logic (no UI)
-  Local/   TuyaCodec (framing, crypto), TuyaLocalClient (TCP session), TuyaDiscovery (UDP)
+  Local/   TuyaCodec (framing, crypto), TuyaLocalClient (TCP session), TuyaDiscovery (UDP),
+           MatterBridgeClient (Node sidecar over stdio), MatterMapping (Matter clusters↔DP)
   Cloud/   TuyaCloudClient (OpenAPI signing), SmartThingsClient (OAuth + REST), SmartThingsMapping (capability↔DP)
   Lights/  HsvColor (Tuya colour encodings), LightProfile (DP mapping, scenes)
   Model/   config, DPAPI store, default DP schemas, tinytuya importer
-  Services/DeviceManager, DeviceRuntime (LAN → Cloud → SmartThings routing), Scheduler
+  Services/DeviceManager, DeviceRuntime (Matter / LAN → Cloud → SmartThings routing), Scheduler
 src/LedvanceControl.App      WPF UI (MVVM), Dark/Light themes, energy monitor, tray scheduler
+src/LedvanceControl.MatterBridge  Node.js Matter controller (matter.js), JSON lines over stdio
 tests/LedvanceControl.Tests  xUnit tests incl. a fake Tuya device
 ```
 

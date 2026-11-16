@@ -15,3 +15,7 @@ packaging/out/
 *.msixbundle
 *.cer
 *.pfx
+
+# Matter bridge (Node.js): dependencies and the generated bundle
+src/LedvanceControl.MatterBridge/node_modules/
+src/LedvanceControl.MatterBridge/dist/

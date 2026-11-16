@@ -60,7 +60,7 @@
                             <Hyperlink NavigateUri="https://github.com/sreddev" RequestNavigate="Link_RequestNavigate" Foreground="{DynamicResource Accent}" TextDecorations="None">GitHub @sreddev</Hyperlink><Run Text="    ·    " Foreground="{DynamicResource TextMuted}" /><Hyperlink NavigateUri="https://t.me/sreddev" RequestNavigate="Link_RequestNavigate" Foreground="{DynamicResource Accent}" TextDecorations="None">Telegram @sreddev</Hyperlink><Run Text="    ·    " Foreground="{DynamicResource TextMuted}" /><Hyperlink NavigateUri="https://www.paypal.com/paypalme/sreddev?locale.x=ro_RO&amp;country.x=RO" RequestNavigate="Link_RequestNavigate" Foreground="{DynamicResource Accent}" TextDecorations="None">Donate</Hyperlink>
                         </TextBlock>
                         <TextBlock Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap"
-                                   Text="LEDVANCE, Tuya &amp; SmartThings are trademarks of their respective owners; this project is not affiliated with them." />
+                                   Text="LEDVANCE, Tuya, SmartThings &amp; Matter are trademarks of their respective owners; this project is not affiliated with them." />
                     </StackPanel>
                 </Grid>
             </Border>
@@ -92,6 +92,94 @@
                         <Button Content="Apply changes" Style="{StaticResource AccentButton}" Command="{Binding SaveDevicesCommand}" />
                         <Button Content="Remove selected" Command="{Binding RemoveDeviceCommand}" />
                     </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Rooms -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Rooms" Style="{StaticResource H2}" Margin="0" VerticalAlignment="Center" />
+                        <views:HelpButton Topic="Settings.Rooms" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10" TextWrapping="Wrap"
+                               Text="Rooms group the Devices page. Rooms from SmartThings and Tuya syncs are added here automatically; you can add your own, rename or delete them. Assign a device to a room with Edit on the Devices page (or the Room column above)." />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="260" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <ListBox ItemsSource="{Binding Rooms}" SelectedItem="{Binding SelectedRoom}" Height="132" Margin="0,0,12,0"
+                                 BorderBrush="{DynamicResource Border}" BorderThickness="1" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Room name (new room, or new name for the selected one)" Style="{StaticResource Label}" />
+                            <TextBox Text="{Binding RoomName, UpdateSourceTrigger=PropertyChanged}" MaxWidth="360" HorizontalAlignment="Left" MinWidth="260" />
+                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                <Button Content="Add room" Style="{StaticResource AccentButton}" Command="{Binding AddRoomCommand}" />
+                                <Button Content="Rename selected" Command="{Binding RenameRoomCommand}" />
+                                <Button Content="Delete selected" Command="{Binding DeleteRoomCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Matter -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Matter over Wi-Fi (local, no hub)" Style="{StaticResource H2}" Margin="0" VerticalAlignment="Center" />
+                        <views:HelpButton Topic="Settings.Matter" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10" TextWrapping="Wrap"
+                               Text="Controls Matter bulbs directly over your LAN — no hub and no cloud. This PC becomes an additional Matter controller, so the bulb keeps working in its current app too. Open a pairing window for the bulb in its current app (e.g. 'Share' / 'Linked Matter apps'), then enter the code shown there." />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,10,0">
+                            <TextBlock Text="Pairing code (11 or 21 digits, or MT:… from the QR code)" Style="{StaticResource Label}" />
+                            <TextBox Text="{Binding MatterCode, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Bulb IP (optional, speeds up pairing)" Style="{StaticResource Label}" />
+                            <TextBox Text="{Binding MatterIp, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Pair Matter device" Style="{StaticResource AccentButton}" Command="{Binding PairMatterCommand}" />
+                        <Button Content="Find devices in pairing mode" Command="{Binding FindMatterCommand}" />
+                        <Button Content="Refresh Matter devices" Command="{Binding SyncMatterCommand}" />
+                    </StackPanel>
+                    <TextBlock Margin="0,4,0,0" TextWrapping="Wrap">
+                        <Run Text="Status: " Foreground="{DynamicResource TextMuted}" /><Run Text="{Binding MatterStatus, Mode=OneWay}" />
+                    </TextBlock>
+                    <DataGrid ItemsSource="{Binding MatterDiscovered}" AutoGenerateColumns="False" IsReadOnly="True" Margin="0,10,0,0" MaxHeight="160"
+                              HeadersVisibility="Column" GridLinesVisibility="None" BorderBrush="{DynamicResource Border}">
+                        <DataGrid.Style>
+                            <Style TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding MatterDiscovered.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.Style>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding DeviceName}" Width="2*" />
+                            <DataGridTextColumn Header="Discriminator" Binding="{Binding Discriminator}" Width="100" />
+                            <DataGridTextColumn Header="Vendor / product" Width="*">
+                                <DataGridTextColumn.Binding>
+                                    <MultiBinding StringFormat="{}{0} / {1}">
+                                        <Binding Path="VendorId" />
+                                        <Binding Path="ProductId" />
+                                    </MultiBinding>
+                                </DataGridTextColumn.Binding>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Addresses" Binding="{Binding Addresses[0]}" Width="2*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
                 </StackPanel>
             </Border>
 

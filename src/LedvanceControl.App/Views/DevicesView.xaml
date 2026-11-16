@@ -85,13 +85,52 @@
                 <DockPanel Margin="0,0,0,12">
                     <Button DockPanel.Dock="Right" Content="Refresh" Command="{Binding RefreshCommand}" VerticalAlignment="Top" Margin="0" />
                     <Button DockPanel.Dock="Right" Content="Diagnostics" Command="{Binding DiagnosticsCommand}" VerticalAlignment="Top" />
+                    <Button DockPanel.Dock="Right" Content="Edit" Command="{Binding EditCommand}" VerticalAlignment="Top"
+                            ToolTip="Rename the device or change its room" />
                     <StackPanel>
-                        <TextBlock Text="{Binding Name}" Style="{StaticResource H1}" Margin="0" />
+                        <TextBlock Text="{Binding Name}" Style="{StaticResource H1}" Margin="0" TextTrimming="CharacterEllipsis" />
                         <TextBlock Style="{StaticResource Muted}">
                             <Run Text="{Binding Subtitle, Mode=OneWay}" /> · <Run Text="{Binding Room, Mode=OneWay}" /> · <Run Text="{Binding StatusText, Mode=OneWay}" />
                         </TextBlock>
                     </StackPanel>
                 </DockPanel>
+
+                <!-- Rename / room editor -->
+                <Border Style="{StaticResource Card}" Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
+                    <StackPanel>
+                        <TextBlock Text="Name and room" Style="{StaticResource H2}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="3*" />
+                                <ColumnDefinition Width="2*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,10,0">
+                                <TextBlock Text="Name" Style="{StaticResource Label}" />
+                                <TextBox x:Name="EditNameBox" Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}">
+                                    <TextBox.InputBindings>
+                                        <KeyBinding Key="Enter" Command="{Binding SaveEditCommand}" />
+                                        <KeyBinding Key="Escape" Command="{Binding CancelEditCommand}" />
+                                    </TextBox.InputBindings>
+                                </TextBox>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="Room (pick or type a new one)" ToolTip="Leave empty for no room" Style="{StaticResource Label}" />
+                                <ComboBox IsEditable="True" IsTextSearchEnabled="True" ItemsSource="{Binding KnownRooms}"
+                                          Text="{Binding EditRoom, UpdateSourceTrigger=PropertyChanged}">
+                                    <ComboBox.InputBindings>
+                                        <KeyBinding Key="Enter" Command="{Binding SaveEditCommand}" />
+                                        <KeyBinding Key="Escape" Command="{Binding CancelEditCommand}" />
+                                    </ComboBox.InputBindings>
+                                </ComboBox>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                            <Button Content="Save" Style="{StaticResource AccentButton}" Command="{Binding SaveEditCommand}" />
+                            <Button Content="Cancel" Command="{Binding CancelEditCommand}" />
+                            <TextBlock Text="{Binding NameSourceHint}" Style="{StaticResource Muted}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
 
                 <Border Style="{StaticResource Card}" Visibility="{Binding IsLight, Converter={StaticResource BoolToVis}}">
                     <views:LightPanel DataContext="{Binding Light}" />

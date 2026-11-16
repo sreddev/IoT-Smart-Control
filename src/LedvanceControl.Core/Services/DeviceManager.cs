@@ -16,19 +16,28 @@ public sealed class DeviceManager : IAsyncDisposable
     private readonly Dictionary<string, DeviceRuntime> _devices = new();
     private readonly object _saveGate = new();
 
-    public DeviceManager(ConfigStore store)
+    /// <param name="matter">Where the Matter bridge lives; null disables Matter (e.g. Node.js not installed).</param>
+    public DeviceManager(ConfigStore store, MatterBridgeOptions? matter = null)
     {
         _store = store;
         Config = store.Load();
         foreach (var d in Config.Devices) _devices[d.Id] = new DeviceRuntime(this, d);
         RecreateCloud();
         RecreateSmartThings();
+        if (matter != null)
+        {
+            Matter = new MatterBridgeClient(matter);
+            Matter.StateReceived += (nodeId, state) => FindMatter(nodeId)?.ApplyMatterState(state);
+            Matter.ConnectionChanged += (nodeId, status) => FindMatter(nodeId)?.ApplyMatterConnection(status);
+        }
     }
 
     public AppConfig Config { get; }
     public string ConfigPath => _store.Path;
     public TuyaCloudClient? Cloud { get; private set; }
     public SmartThingsClient? SmartThings { get; private set; }
+    /// <summary>The Matter controller bridge, or null when Node.js / the bridge is not available.</summary>
+    public MatterBridgeClient? Matter { get; }
     public IReadOnlyList<CloudScene> CloudScenes { get; private set; } = [];
     public IReadOnlyList<CloudAutomation> CloudAutomations { get; private set; } = [];
 
@@ -82,16 +91,16 @@ public sealed class DeviceManager : IAsyncDisposable
         foreach (var loc in devices.Select(d => d.LocationId).OfType<string>().Distinct())
             foreach (var r in await st.GetRoomsAsync(loc, ct))
                 rooms[r.RoomId] = r.Name;
+        MergeRooms(rooms.Values);
 
         int count = 0;
         foreach (var d in devices.Where(d => d.Capabilities.Contains(SmartThingsMapping.CapSwitch)))
         {
             var cfg = Config.Devices.FirstOrDefault(c => c.Id == d.DeviceId) ?? new DeviceConfig { Id = d.DeviceId };
             if (!Config.Devices.Contains(cfg)) Config.Devices.Add(cfg);
-            cfg.Name = d.Label;
+            ApplySynced(cfg, d.Label, d.RoomId != null && rooms.TryGetValue(d.RoomId, out var rn) ? rn : null);
             cfg.SmartThingsId = d.DeviceId;
             cfg.Category = SmartThingsMapping.GuessCategory(d.Capabilities);
-            cfg.Room = d.RoomId != null && rooms.TryGetValue(d.RoomId, out var rn) ? rn : cfg.Room;
             cfg.Schema = SmartThingsMapping.BuildSchema(d.Capabilities);
             cfg.PreferLocal = false;
             if (_devices.TryGetValue(d.DeviceId, out var rt)) rt.SchemaChanged();
@@ -128,7 +137,7 @@ public sealed class DeviceManager : IAsyncDisposable
                 cfg = new DeviceConfig { Id = cd.Id };
                 Config.Devices.Add(cfg);
             }
-            cfg.Name = cd.Name;
+            ApplySynced(cfg, cd.Name, room: null);
             cfg.LocalKey = cd.LocalKey ?? cfg.LocalKey;
             cfg.Category = cd.Category;
             cfg.ProductId = cd.ProductId;
@@ -161,9 +170,11 @@ public sealed class DeviceManager : IAsyncDisposable
             {
                 try
                 {
-                    foreach (var room in await cloud.GetRoomsAsync(home.HomeId, ct))
+                    var cloudRooms = await cloud.GetRoomsAsync(home.HomeId, ct);
+                    MergeRooms(cloudRooms.Select(r => r.Name));
+                    foreach (var room in cloudRooms)
                     foreach (var id in room.DeviceIds)
-                        if (Config.Devices.FirstOrDefault(d => d.Id == id) is { } dev) dev.Room = room.Name;
+                        if (Config.Devices.FirstOrDefault(d => d.Id == id) is { } dev) ApplySynced(dev, name: null, room.Name);
                 }
                 catch (TuyaCloudException) { }
             }
@@ -196,6 +207,88 @@ public sealed class DeviceManager : IAsyncDisposable
         ListChanged?.Invoke();
     }
 
+    // ---------------------------------------------------------------- Matter
+
+    public const string MatterIdPrefix = "matter-";
+
+    private DeviceRuntime? FindMatter(string nodeId) =>
+        _devices.Values.FirstOrDefault(d => d.Config.MatterNodeId == nodeId);
+
+    private MatterBridgeClient RequireMatter() => Matter
+        ?? throw new InvalidOperationException("Matter needs Node.js (nodejs.org, LTS). Install it and restart the app.");
+
+    /// <summary>
+    /// Pairs a Matter device into this PC's own fabric (multi-admin: it stays paired with its other
+    /// apps) and adds it as a device. The device must have a pairing window open.
+    /// </summary>
+    public async Task<DeviceRuntime> PairMatterAsync(string pairingCode, string? ip = null, IProgress<string>? progress = null, CancellationToken ct = default)
+    {
+        var bridge = RequireMatter();
+        progress?.Report("Pairing over Matter (this can take up to a minute)…");
+        var info = await bridge.CommissionAsync(pairingCode, ip, ct);
+        var rt = UpsertMatter(info, renameExisting: true);
+        Save();
+        ListChanged?.Invoke();
+        if (info.State != null) rt.ApplyMatterState(info.State);
+        progress?.Report($"Paired '{rt.Config.Name}' over Matter.");
+        return rt;
+    }
+
+    /// <summary>Re-reads the list of Matter devices paired with this PC and adds/prunes devices accordingly.</summary>
+    public async Task SyncMatterAsync(IProgress<string>? progress = null, CancellationToken ct = default)
+    {
+        var bridge = RequireMatter();
+        progress?.Report("Reading Matter devices…");
+        var nodes = await bridge.GetNodesAsync(ct);
+        foreach (var n in nodes) UpsertMatter(n, renameExisting: false);
+
+        var live = nodes.Select(n => n.NodeId).ToHashSet();
+        var stale = Config.Devices.Where(c => c.MatterNodeId != null && !live.Contains(c.MatterNodeId)).Select(c => c.Id).ToList();
+        foreach (var id in stale) RemoveInternal(id);
+
+        Save();
+        ListChanged?.Invoke();
+        var msg = $"{nodes.Count} Matter device(s) paired with this PC";
+        if (stale.Count > 0) msg += $", removed {stale.Count} no longer paired";
+        progress?.Report(msg + ".");
+    }
+
+    public Task<IReadOnlyList<MatterCommissionableDevice>> DiscoverMatterAsync(TimeSpan duration, CancellationToken ct = default) =>
+        RequireMatter().DiscoverAsync(duration, ct);
+
+    private DeviceRuntime UpsertMatter(MatterNodeInfo info, bool renameExisting)
+    {
+        var id = MatterIdPrefix + info.NodeId;
+        var cfg = Config.Devices.FirstOrDefault(c => c.MatterNodeId == info.NodeId) ?? Config.Devices.FirstOrDefault(c => c.Id == id);
+        bool isNew = cfg == null;
+        cfg ??= new DeviceConfig { Id = id, Name = info.Name };
+        if (isNew) Config.Devices.Add(cfg);
+        else if (renameExisting && !string.IsNullOrWhiteSpace(info.Name)) ApplySynced(cfg, info.Name, room: null);
+
+        cfg.MatterNodeId = info.NodeId;
+        cfg.ProductName = info.ProductName ?? cfg.ProductName;
+        cfg.PreferLocal = true;
+        if (info.Capabilities is { } caps)
+        {
+            cfg.Category = MatterMapping.GuessCategory(caps);
+            cfg.Schema = MatterMapping.BuildSchema(caps);
+        }
+        else if (cfg.Schema.Count == 0)
+        {
+            cfg.Category ??= "dj";
+            cfg.Schema = MatterMapping.BuildSchema(new MatterCapabilities { Level = true });
+        }
+
+        if (_devices.TryGetValue(cfg.Id, out var rt))
+        {
+            rt.SchemaChanged();
+            return rt;
+        }
+        rt = new DeviceRuntime(this, cfg);
+        _devices[cfg.Id] = rt;
+        return rt;
+    }
+
     // ---------------------------------------------------------------- LAN
 
     /// <summary>Listens for device broadcasts and updates IP/protocol version of known devices.</summary>
@@ -212,6 +305,111 @@ public sealed class DeviceManager : IAsyncDisposable
         Save();
         ListChanged?.Invoke();
         return found;
+    }
+
+    // ---------------------------------------------------------------- names & rooms
+
+    /// <summary>
+    /// Applies a name/room coming from a sync source (SmartThings, Tuya, Matter) unless the user
+    /// changed that field in this app. Null or blank values leave the field untouched.
+    /// </summary>
+    public static void ApplySynced(DeviceConfig cfg, string? name, string? room)
+    {
+        if (!cfg.NameEdited && !string.IsNullOrWhiteSpace(name)) cfg.Name = name.Trim();
+        if (!cfg.RoomEdited && !string.IsNullOrWhiteSpace(room)) cfg.Room = room.Trim();
+    }
+
+    /// <summary>Every room known to the app: the stored list plus any room a device is in, sorted.</summary>
+    public IReadOnlyList<string> KnownRooms =>
+        Config.Rooms.Concat(Config.Devices.Select(d => d.Room))
+            .Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r!.Trim())
+            .Distinct(StringComparer.CurrentCultureIgnoreCase)
+            .Order(StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+    /// <summary>Adds rooms (e.g. from a sync) to the stored list, ignoring duplicates (case-insensitive).</summary>
+    private void MergeRooms(IEnumerable<string?> rooms)
+    {
+        foreach (var r in rooms)
+        {
+            if (string.IsNullOrWhiteSpace(r)) continue;
+            var name = r.Trim();
+            if (!Config.Rooms.Contains(name, StringComparer.CurrentCultureIgnoreCase)) Config.Rooms.Add(name);
+        }
+    }
+
+    /// <summary>Canonical spelling of a room name if it already exists (so "living room" joins "Living room").</summary>
+    private string Canonical(string room) =>
+        KnownRooms.FirstOrDefault(r => string.Equals(r, room, StringComparison.CurrentCultureIgnoreCase)) ?? room;
+
+    /// <summary>Renames a device in this app; later syncs will not overwrite it.</summary>
+    public void RenameDevice(string id, string name)
+    {
+        var cfg = Config.Devices.FirstOrDefault(d => d.Id == id) ?? throw new InvalidOperationException("Unknown device.");
+        if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("The name cannot be empty.");
+        if (cfg.Name == name.Trim()) return;
+        cfg.Name = name.Trim();
+        cfg.NameEdited = true;
+        Save();
+        ListChanged?.Invoke();
+    }
+
+    /// <summary>Moves a device to a room (null/blank = no room); a new room name is added to the list.
+    /// Later syncs will not overwrite the assignment.</summary>
+    public void SetDeviceRoom(string id, string? room)
+    {
+        var cfg = Config.Devices.FirstOrDefault(d => d.Id == id) ?? throw new InvalidOperationException("Unknown device.");
+        var target = string.IsNullOrWhiteSpace(room) ? null : Canonical(room.Trim());
+        if (target != null) MergeRooms([target]);
+        if (cfg.Room == target && cfg.RoomEdited) return;
+        cfg.Room = target;
+        cfg.RoomEdited = true;
+        Save();
+        ListChanged?.Invoke();
+    }
+
+    public void AddRoom(string room)
+    {
+        if (string.IsNullOrWhiteSpace(room)) throw new InvalidOperationException("The room name cannot be empty.");
+        if (KnownRooms.Contains(room.Trim(), StringComparer.CurrentCultureIgnoreCase))
+            throw new InvalidOperationException($"A room called '{room.Trim()}' already exists.");
+        MergeRooms([room]);
+        Save();
+        ListChanged?.Invoke();
+    }
+
+    /// <summary>Renames a room everywhere; its devices keep (and pin) their assignment.</summary>
+    public void RenameRoom(string oldName, string newName)
+    {
+        if (string.IsNullOrWhiteSpace(newName)) throw new InvalidOperationException("The room name cannot be empty.");
+        newName = newName.Trim();
+        bool Same(string? r) => string.Equals(r?.Trim(), oldName, StringComparison.CurrentCultureIgnoreCase);
+        if (!string.Equals(oldName, newName, StringComparison.CurrentCultureIgnoreCase) &&
+            KnownRooms.Contains(newName, StringComparer.CurrentCultureIgnoreCase))
+            throw new InvalidOperationException($"A room called '{newName}' already exists.");
+        Config.Rooms.RemoveAll(r => Same(r));
+        Config.Rooms.Add(newName);
+        foreach (var d in Config.Devices.Where(d => Same(d.Room)))
+        {
+            d.Room = newName;
+            d.RoomEdited = true;
+        }
+        Save();
+        ListChanged?.Invoke();
+    }
+
+    /// <summary>Deletes a room; its devices move to "No room" (and stay there across syncs).</summary>
+    public void DeleteRoom(string room)
+    {
+        bool Same(string? r) => string.Equals(r?.Trim(), room, StringComparison.CurrentCultureIgnoreCase);
+        Config.Rooms.RemoveAll(r => Same(r));
+        foreach (var d in Config.Devices.Where(d => Same(d.Room)))
+        {
+            d.Room = null;
+            d.RoomEdited = true;
+        }
+        Save();
+        ListChanged?.Invoke();
     }
 
     // ---------------------------------------------------------------- device CRUD
@@ -231,6 +429,9 @@ public sealed class DeviceManager : IAsyncDisposable
 
     public void Remove(string id)
     {
+        // A Matter device is also removed from this PC's fabric (its other controllers keep it).
+        if (Find(id)?.Config.MatterNodeId is { } nodeId && Matter != null)
+            _ = Matter.RemoveAsync(nodeId).ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
         RemoveInternal(id);
         Save();
         ListChanged?.Invoke();
@@ -332,5 +533,6 @@ public sealed class DeviceManager : IAsyncDisposable
         foreach (var d in _devices.Values) await d.DisposeAsync();
         Cloud?.Dispose();
         SmartThings?.Dispose();
+        if (Matter != null) await Matter.DisposeAsync();
     }
 }

@@ -17,7 +17,10 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
 
     public MainViewModel()
     {
-        Manager = new DeviceManager(new ConfigStore());
+        var store = new ConfigStore();
+        // The Matter fabric (this PC's controller identity + paired nodes) lives next to config.json.
+        var matterStorage = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(store.Path)!, "matter");
+        Manager = new DeviceManager(store, LedvanceControl.Core.Local.MatterBridgeOptions.Locate(AppContext.BaseDirectory, matterStorage));
         Scheduler = new Scheduler(Manager);
         Scheduler.Executed += (e, errors) => Status.Errors($"Schedule '{e.Name}'", errors);
         LedvanceControl.App.Mvvm.Status.Changed += (text, error) => { StatusText = text; StatusIsError = error; };
@@ -146,7 +149,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         foreach (var rt in Manager.Devices)
         {
             // reuse view models whose runtime instance did not change
-            var vm = existing.TryGetValue(rt.Id, out var old) && ReferenceEquals(old.Runtime, rt) ? old : new DeviceViewModel(rt);
+            var vm = existing.TryGetValue(rt.Id, out var old) && ReferenceEquals(old.Runtime, rt) ? old : new DeviceViewModel(rt, Manager);
             if (ReferenceEquals(vm, old)) vm.RebuildDps();
             Devices.Add(vm);
         }
