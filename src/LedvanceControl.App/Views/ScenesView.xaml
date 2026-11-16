@@ -44,7 +44,7 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <CheckBox IsChecked="{Binding IsSelected}" Content="{Binding Name}" Width="220" />
+                                <CheckBox IsChecked="{Binding IsSelected}" Content="{Binding NameWithHouse}" Width="260" ToolTip="{Binding NameWithHouse}" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

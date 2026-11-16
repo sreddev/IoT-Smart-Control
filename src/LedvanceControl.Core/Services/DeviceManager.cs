@@ -10,7 +10,7 @@ namespace LedvanceControl.Core.Services;
 /// Owns the configuration, the device runtimes and the optional cloud client.
 /// Everything the UI does goes through here.
 /// </summary>
-public sealed class DeviceManager : IAsyncDisposable
+public sealed partial class DeviceManager : IAsyncDisposable
 {
     private readonly ConfigStore _store;
     private readonly Dictionary<string, DeviceRuntime> _devices = new();
@@ -21,6 +21,7 @@ public sealed class DeviceManager : IAsyncDisposable
     {
         _store = store;
         Config = store.Load();
+        if (EnsureHouses()) Save();
         foreach (var d in Config.Devices) _devices[d.Id] = new DeviceRuntime(this, d);
         RecreateCloud();
         RecreateSmartThings();
@@ -87,18 +88,25 @@ public sealed class DeviceManager : IAsyncDisposable
         progress?.Report("Loading SmartThings devices…");
         var devices = await st.GetDevicesAsync(ct);
 
+        // Each SmartThings location is a house; its rooms are that house's rooms.
         var rooms = new Dictionary<string, string>();
+        var houseByLocation = new Dictionary<string, HouseConfig>();
         foreach (var loc in devices.Select(d => d.LocationId).OfType<string>().Distinct())
-            foreach (var r in await st.GetRoomsAsync(loc, ct))
-                rooms[r.RoomId] = r.Name;
-        MergeRooms(rooms.Values);
+        {
+            var house = LinkHouse(HouseSource.SmartThings, loc, await st.GetLocationNameAsync(loc, ct));
+            houseByLocation[loc] = house;
+            var locRooms = await st.GetRoomsAsync(loc, ct);
+            foreach (var r in locRooms) rooms[r.RoomId] = r.Name;
+            MergeRooms(house, locRooms.Select(r => r.Name));
+        }
 
         int count = 0;
         foreach (var d in devices.Where(d => d.Capabilities.Contains(SmartThingsMapping.CapSwitch)))
         {
             var cfg = Config.Devices.FirstOrDefault(c => c.Id == d.DeviceId) ?? new DeviceConfig { Id = d.DeviceId };
             if (!Config.Devices.Contains(cfg)) Config.Devices.Add(cfg);
-            ApplySynced(cfg, d.Label, d.RoomId != null && rooms.TryGetValue(d.RoomId, out var rn) ? rn : null);
+            var houseId = d.LocationId != null && houseByLocation.TryGetValue(d.LocationId, out var h) ? h.Id : cfg.HouseId ?? CurrentHouse.Id;
+            ApplySynced(cfg, d.Label, d.RoomId != null && rooms.TryGetValue(d.RoomId, out var rn) ? rn : null, houseId);
             cfg.SmartThingsId = d.DeviceId;
             cfg.Category = SmartThingsMapping.GuessCategory(d.Capabilities);
             cfg.Schema = SmartThingsMapping.BuildSchema(d.Capabilities);
@@ -138,6 +146,7 @@ public sealed class DeviceManager : IAsyncDisposable
                 Config.Devices.Add(cfg);
             }
             ApplySynced(cfg, cd.Name, room: null);
+            cfg.HouseId ??= CurrentHouse.Id; // refined below once the Tuya homes are known
             cfg.LocalKey = cd.LocalKey ?? cfg.LocalKey;
             cfg.Category = cd.Category;
             cfg.ProductId = cd.ProductId;
@@ -168,13 +177,17 @@ public sealed class DeviceManager : IAsyncDisposable
             catch (TuyaCloudException) { continue; }
             foreach (var home in homes)
             {
+                // Each Tuya home is a house; its devices live there.
+                var house = LinkHouse(HouseSource.Tuya, home.HomeId, home.Name);
+                foreach (var dev in Config.Devices.Where(d => d.InCloud && d.HomeId == home.HomeId))
+                    ApplySynced(dev, name: null, room: null, house.Id);
                 try
                 {
                     var cloudRooms = await cloud.GetRoomsAsync(home.HomeId, ct);
-                    MergeRooms(cloudRooms.Select(r => r.Name));
+                    MergeRooms(house, cloudRooms.Select(r => r.Name));
                     foreach (var room in cloudRooms)
                     foreach (var id in room.DeviceIds)
-                        if (Config.Devices.FirstOrDefault(d => d.Id == id) is { } dev) ApplySynced(dev, name: null, room.Name);
+                        if (Config.Devices.FirstOrDefault(d => d.Id == id) is { } dev) ApplySynced(dev, name: null, room.Name, house.Id);
                 }
                 catch (TuyaCloudException) { }
             }
@@ -261,7 +274,7 @@ public sealed class DeviceManager : IAsyncDisposable
         var id = MatterIdPrefix + info.NodeId;
         var cfg = Config.Devices.FirstOrDefault(c => c.MatterNodeId == info.NodeId) ?? Config.Devices.FirstOrDefault(c => c.Id == id);
         bool isNew = cfg == null;
-        cfg ??= new DeviceConfig { Id = id, Name = info.Name };
+        cfg ??= new DeviceConfig { Id = id, Name = info.Name, HouseId = CurrentHouse.Id }; // paired into the selected house
         if (isNew) Config.Devices.Add(cfg);
         else if (renameExisting && !string.IsNullOrWhiteSpace(info.Name)) ApplySynced(cfg, info.Name, room: null);
 
@@ -307,115 +320,11 @@ public sealed class DeviceManager : IAsyncDisposable
         return found;
     }
 
-    // ---------------------------------------------------------------- names & rooms
-
-    /// <summary>
-    /// Applies a name/room coming from a sync source (SmartThings, Tuya, Matter) unless the user
-    /// changed that field in this app. Null or blank values leave the field untouched.
-    /// </summary>
-    public static void ApplySynced(DeviceConfig cfg, string? name, string? room)
-    {
-        if (!cfg.NameEdited && !string.IsNullOrWhiteSpace(name)) cfg.Name = name.Trim();
-        if (!cfg.RoomEdited && !string.IsNullOrWhiteSpace(room)) cfg.Room = room.Trim();
-    }
-
-    /// <summary>Every room known to the app: the stored list plus any room a device is in, sorted.</summary>
-    public IReadOnlyList<string> KnownRooms =>
-        Config.Rooms.Concat(Config.Devices.Select(d => d.Room))
-            .Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r!.Trim())
-            .Distinct(StringComparer.CurrentCultureIgnoreCase)
-            .Order(StringComparer.CurrentCultureIgnoreCase)
-            .ToList();
-
-    /// <summary>Adds rooms (e.g. from a sync) to the stored list, ignoring duplicates (case-insensitive).</summary>
-    private void MergeRooms(IEnumerable<string?> rooms)
-    {
-        foreach (var r in rooms)
-        {
-            if (string.IsNullOrWhiteSpace(r)) continue;
-            var name = r.Trim();
-            if (!Config.Rooms.Contains(name, StringComparer.CurrentCultureIgnoreCase)) Config.Rooms.Add(name);
-        }
-    }
-
-    /// <summary>Canonical spelling of a room name if it already exists (so "living room" joins "Living room").</summary>
-    private string Canonical(string room) =>
-        KnownRooms.FirstOrDefault(r => string.Equals(r, room, StringComparison.CurrentCultureIgnoreCase)) ?? room;
-
-    /// <summary>Renames a device in this app; later syncs will not overwrite it.</summary>
-    public void RenameDevice(string id, string name)
-    {
-        var cfg = Config.Devices.FirstOrDefault(d => d.Id == id) ?? throw new InvalidOperationException("Unknown device.");
-        if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("The name cannot be empty.");
-        if (cfg.Name == name.Trim()) return;
-        cfg.Name = name.Trim();
-        cfg.NameEdited = true;
-        Save();
-        ListChanged?.Invoke();
-    }
-
-    /// <summary>Moves a device to a room (null/blank = no room); a new room name is added to the list.
-    /// Later syncs will not overwrite the assignment.</summary>
-    public void SetDeviceRoom(string id, string? room)
-    {
-        var cfg = Config.Devices.FirstOrDefault(d => d.Id == id) ?? throw new InvalidOperationException("Unknown device.");
-        var target = string.IsNullOrWhiteSpace(room) ? null : Canonical(room.Trim());
-        if (target != null) MergeRooms([target]);
-        if (cfg.Room == target && cfg.RoomEdited) return;
-        cfg.Room = target;
-        cfg.RoomEdited = true;
-        Save();
-        ListChanged?.Invoke();
-    }
-
-    public void AddRoom(string room)
-    {
-        if (string.IsNullOrWhiteSpace(room)) throw new InvalidOperationException("The room name cannot be empty.");
-        if (KnownRooms.Contains(room.Trim(), StringComparer.CurrentCultureIgnoreCase))
-            throw new InvalidOperationException($"A room called '{room.Trim()}' already exists.");
-        MergeRooms([room]);
-        Save();
-        ListChanged?.Invoke();
-    }
-
-    /// <summary>Renames a room everywhere; its devices keep (and pin) their assignment.</summary>
-    public void RenameRoom(string oldName, string newName)
-    {
-        if (string.IsNullOrWhiteSpace(newName)) throw new InvalidOperationException("The room name cannot be empty.");
-        newName = newName.Trim();
-        bool Same(string? r) => string.Equals(r?.Trim(), oldName, StringComparison.CurrentCultureIgnoreCase);
-        if (!string.Equals(oldName, newName, StringComparison.CurrentCultureIgnoreCase) &&
-            KnownRooms.Contains(newName, StringComparer.CurrentCultureIgnoreCase))
-            throw new InvalidOperationException($"A room called '{newName}' already exists.");
-        Config.Rooms.RemoveAll(r => Same(r));
-        Config.Rooms.Add(newName);
-        foreach (var d in Config.Devices.Where(d => Same(d.Room)))
-        {
-            d.Room = newName;
-            d.RoomEdited = true;
-        }
-        Save();
-        ListChanged?.Invoke();
-    }
-
-    /// <summary>Deletes a room; its devices move to "No room" (and stay there across syncs).</summary>
-    public void DeleteRoom(string room)
-    {
-        bool Same(string? r) => string.Equals(r?.Trim(), room, StringComparison.CurrentCultureIgnoreCase);
-        Config.Rooms.RemoveAll(r => Same(r));
-        foreach (var d in Config.Devices.Where(d => Same(d.Room)))
-        {
-            d.Room = null;
-            d.RoomEdited = true;
-        }
-        Save();
-        ListChanged?.Invoke();
-    }
-
     // ---------------------------------------------------------------- device CRUD
 
     public DeviceRuntime AddOrUpdate(DeviceConfig cfg)
     {
+        if (cfg.HouseId == null || FindHouse(cfg.HouseId) == null) cfg.HouseId = CurrentHouse.Id;
         var existing = Config.Devices.FindIndex(d => d.Id == cfg.Id);
         if (existing >= 0) Config.Devices[existing] = cfg;
         else Config.Devices.Add(cfg);

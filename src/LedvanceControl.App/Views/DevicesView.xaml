@@ -124,6 +124,30 @@
                                 </ComboBox>
                             </StackPanel>
                         </Grid>
+                        <!-- House: move rules depend on where the device comes from -->
+                        <Border BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Margin="0,14,0,0" Padding="0,10,0,0">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Label}">
+                                    <Run Text="House:" /> <Run Text="{Binding HouseName, Mode=OneWay}" FontWeight="SemiBold" />
+                                </TextBlock>
+                                <TextBlock Text="{Binding MoveBlockedReason}" Style="{StaticResource Muted}" TextWrapping="Wrap"
+                                           Visibility="{Binding MoveBlockedReason, Converter={StaticResource NullToVis}}" />
+                                <StackPanel Visibility="{Binding CanMoveHouse, Converter={StaticResource BoolToVis}}">
+                                    <DockPanel Margin="0,4,0,0">
+                                        <Button DockPanel.Dock="Right" Content="Move to house" Command="{Binding MoveHouseCommand}" Margin="8,0,0,0" />
+                                        <ComboBox ItemsSource="{Binding OtherHouses}" SelectedValuePath="Id"
+                                                  SelectedValue="{Binding MoveTargetHouseId}" MaxWidth="320" HorizontalAlignment="Left" MinWidth="200">
+                                            <ComboBox.ItemTemplate>
+                            <DataTemplate><TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" /></DataTemplate>
+                        </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                    </DockPanel>
+                                    <CheckBox IsChecked="{Binding MoveConfirmed}" Margin="0,8,0,0"
+                                              Visibility="{Binding MoveNeedsConfirmation, Converter={StaticResource BoolToVis}}"
+                                              Content="I already moved this bulb to that house in the LEDVANCE SMART+ app." />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
                         <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                             <Button Content="Save" Style="{StaticResource AccentButton}" Command="{Binding SaveEditCommand}" />
                             <Button Content="Cancel" Command="{Binding CancelEditCommand}" />

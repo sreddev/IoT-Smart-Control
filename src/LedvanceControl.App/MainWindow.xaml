@@ -44,6 +44,19 @@
                 <StackPanel DockPanel.Dock="Top" Margin="22,18,10,26">
                     <TextBlock Text="IoT Smart Control" Foreground="{DynamicResource Accent}" FontWeight="Bold" FontSize="19" />
                     <TextBlock Text="for Windows" Foreground="{DynamicResource SidebarFg}" FontSize="12" />
+                    <!-- House switcher, like the home picker at the top of the SMART+ app; houses are managed on the Rooms page -->
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,4">
+                        <TextBlock Text="&#xE80F;" FontFamily="{StaticResource Icons}" Foreground="{DynamicResource Accent}"
+                                   FontSize="12" Margin="0,1,6,0" VerticalAlignment="Center" />
+                        <TextBlock Text="House" Foreground="{DynamicResource SidebarFg}" FontSize="11" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <ComboBox ItemsSource="{Binding Houses}" SelectedValuePath="Id"
+                              SelectedValue="{Binding CurrentHouseId}" FontWeight="SemiBold" Margin="0,0,8,0"
+                              ToolTip="Switch house — Devices, Rooms and Groups show the selected house. Add, rename or delete houses on the Rooms page.">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate><TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" /></DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Top">
                     <RadioButton Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Devices"
@@ -51,6 +64,13 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xEA80;" FontFamily="{StaticResource Icons}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Margin="0,2,12,0" />
                             <TextBlock Text="Devices" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Rooms"
+                                 IsChecked="{Binding Page, Mode=OneWay, Converter={StaticResource EqualsConv}, ConverterParameter=Rooms}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE80F;" FontFamily="{StaticResource Icons}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Margin="0,2,12,0" />
+                            <TextBlock Text="Rooms" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
                         </StackPanel>
                     </RadioButton>
                     <RadioButton Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Groups"
@@ -94,6 +114,8 @@
             <!-- Pages -->
             <Grid Grid.Column="2" Margin="24,12,24,8">
                 <views:DevicesView Visibility="{Binding Page, Converter={StaticResource EqualsToVis}, ConverterParameter=Devices}" />
+                <views:RoomsView DataContext="{Binding Rooms}"
+                                 Visibility="{Binding DataContext.Page, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource EqualsToVis}, ConverterParameter=Rooms}" />
                 <views:GroupsView DataContext="{Binding Groups}"
                                   Visibility="{Binding DataContext.Page, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource EqualsToVis}, ConverterParameter=Groups}" />
                 <views:ScenesView DataContext="{Binding Scenes}"

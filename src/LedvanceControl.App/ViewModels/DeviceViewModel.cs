@@ -24,6 +24,7 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
     {
         Runtime = runtime;
         _manager = manager;
+        MoveHouseCommand = new RelayCommand(MoveHouse, _ => MoveTargetHouseId != null && (!MoveRule.NeedsSmartPlusConfirmation || MoveConfirmed));
         EditCommand = new RelayCommand(BeginEdit);
         SaveEditCommand = new RelayCommand(SaveEdit, _ => !string.IsNullOrWhiteSpace(EditName));
         CancelEditCommand = new RelayCommand(() => IsEditing = false);
@@ -65,7 +66,9 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
     public string EditName { get => _editName; set => Set(ref _editName, value); }
     /// <summary>Room typed or picked in the editable combo box; blank = no room.</summary>
     public string EditRoom { get => _editRoom; set => Set(ref _editRoom, value); }
-    public IReadOnlyList<string> KnownRooms => _manager.KnownRooms;
+    /// <summary>Snapshot taken when the editor opens. A fresh list on every get would make the editable
+    /// ComboBox reset its text (and push "" back into <see cref="EditRoom"/>).</summary>
+    public IReadOnlyList<string> KnownRooms { get; private set; } = [];
 
     /// <summary>Where the name/room came from, shown under the editor.</summary>
     public string NameSourceHint =>
@@ -76,11 +79,51 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
             : Runtime.Config.MatterNodeId != null ? "Matter bulbs don't carry the name/room set in their phone app — set them here."
             : "Set the name and room shown in this app.";
 
+    // ---------------------------------------------------------------- house
+
+    private string? _moveTargetHouseId;
+    private bool _moveConfirmed;
+
+    public string? HouseId => Runtime.Config.HouseId;
+    public string HouseName => _manager.FindHouse(HouseId)?.Name ?? "";
+    /// <summary>"Name · House" when there are several houses (for the house-independent Scenes / Schedules pages).</summary>
+    public string NameWithHouse => _manager.Houses.Count > 1 ? $"{Name} · {HouseName}" : Name;
+
+    public HouseMoveRule MoveRule => _manager.HouseMoveRuleFor(Runtime.Config);
+    public bool CanMoveHouse => MoveRule.Allowed;
+    public string? MoveBlockedReason => MoveRule.Allowed ? null : MoveRule.Reason;
+    public bool MoveNeedsConfirmation => MoveRule.NeedsSmartPlusConfirmation;
+    public IReadOnlyList<HouseConfig> OtherHouses { get; private set; } = [];
+    public string? MoveTargetHouseId { get => _moveTargetHouseId; set => Set(ref _moveTargetHouseId, value); }
+    /// <summary>"I already moved this bulb to that house in the LEDVANCE SMART+ app."</summary>
+    public bool MoveConfirmed { get => _moveConfirmed; set => Set(ref _moveConfirmed, value); }
+    public ICommand MoveHouseCommand { get; }
+
+    private void MoveHouse()
+    {
+        if (MoveTargetHouseId is not { } target) return;
+        var name = _manager.FindHouse(target)?.Name;
+        try
+        {
+            IsEditing = false;
+            _manager.MoveDeviceToHouse(Id, target, MoveConfirmed);
+            Status.Info($"Moved '{Name}' to {name}. Switch to that house to see it.");
+        }
+        catch (Exception ex) { Status.Error(ex); }
+    }
+
     private void BeginEdit()
     {
+        OtherHouses = _manager.Houses.Where(h => h.Id != HouseId).ToList();
+        MoveTargetHouseId = OtherHouses.FirstOrDefault()?.Id;
+        MoveConfirmed = false;
+        foreach (var p in new[] { nameof(OtherHouses), nameof(HouseName), nameof(CanMoveHouse), nameof(MoveBlockedReason), nameof(MoveNeedsConfirmation) })
+            OnPropertyChanged(p);
+        // rooms first: replacing ItemsSource after setting the text would clear it again
+        KnownRooms = _manager.RoomsOf(HouseId ?? _manager.CurrentHouse.Id);
+        OnPropertyChanged(nameof(KnownRooms));
         EditName = Runtime.Config.Name;
         EditRoom = Runtime.Config.Room ?? "";
-        OnPropertyChanged(nameof(KnownRooms));
         OnPropertyChanged(nameof(NameSourceHint));
         IsEditing = true;
     }
@@ -163,6 +206,7 @@ public sealed class DeviceViewModel : ObservableObject, ILightTarget
         OnPropertyChanged(nameof(IsOnline));
         OnPropertyChanged(nameof(Name));
         OnPropertyChanged(nameof(Room));
+        OnPropertyChanged(nameof(NameWithHouse));
     }
 
     // ILightTarget

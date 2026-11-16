@@ -108,37 +108,6 @@ public sealed class SettingsViewModel : ObservableObject
 
     public string ConfigPath => _main.Manager.ConfigPath;
 
-    // Rooms
-    private string? _selectedRoom;
-    private string _roomName = "";
-    public ObservableCollection<string> Rooms { get; } = [];
-    public string? SelectedRoom
-    {
-        get => _selectedRoom;
-        set { if (Set(ref _selectedRoom, value) && value != null) RoomName = value; }
-    }
-    /// <summary>Text box used both for a new room and as the new name when renaming the selected one.</summary>
-    public string RoomName { get => _roomName; set => Set(ref _roomName, value); }
-    public ICommand AddRoomCommand => _addRoom ??= new RelayCommand(() => RoomAction(() => _main.Manager.AddRoom(RoomName), $"Added room '{RoomName.Trim()}'"),
-        _ => !string.IsNullOrWhiteSpace(RoomName));
-    public ICommand RenameRoomCommand => _renameRoom ??= new RelayCommand(() => RoomAction(() => _main.Manager.RenameRoom(SelectedRoom!, RoomName), $"Renamed room to '{RoomName.Trim()}'"),
-        _ => SelectedRoom != null && !string.IsNullOrWhiteSpace(RoomName) && RoomName.Trim() != SelectedRoom);
-    public ICommand DeleteRoomCommand => _deleteRoom ??= new RelayCommand(() => RoomAction(() => _main.Manager.DeleteRoom(SelectedRoom!), $"Deleted room '{SelectedRoom}'; its devices now have no room"),
-        _ => SelectedRoom != null);
-    private ICommand? _addRoom, _renameRoom, _deleteRoom;
-
-    private void RoomAction(Action action, string done)
-    {
-        try
-        {
-            action();
-            RoomName = "";
-            ReloadDevices();
-            Status.Info(done);
-        }
-        catch (Exception ex) { Status.Error(ex); }
-    }
-
     /// <summary>Name/room per device as last loaded, to detect edits made in the table.</summary>
     private Dictionary<string, (string Name, string? Room)> _loaded = [];
 
@@ -147,8 +116,6 @@ public sealed class SettingsViewModel : ObservableObject
         DeviceConfigs.Clear();
         foreach (var d in _main.Manager.Config.Devices) DeviceConfigs.Add(d);
         _loaded = _main.Manager.Config.Devices.ToDictionary(d => d.Id, d => (d.Name, d.Room));
-        Rooms.Clear();
-        foreach (var r in _main.Manager.KnownRooms) Rooms.Add(r);
     }
 
     private void SaveCloud()

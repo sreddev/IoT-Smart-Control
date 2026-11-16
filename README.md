@@ -47,6 +47,7 @@ so the connectivity and setup instructions below are also available inside the a
 | Light panel | Power, white mode (brightness, colour temperature), colour mode (hue / saturation / brightness, quick colours) and the 8 built-in Tuya light scenes (Night, Reading, …) |
 | Socket / plug panel | **Energy monitor**: live power draw (W), voltage (V), current (A) and cumulative energy (kWh), read from the plug's metering DPs — plus the plug on/off switch |
 | Generic device panels | Every data point (DP) rendered from the device schema: switches, sliders, drop-downs, text; read-only values (power, voltage, …) shown too |
+| Homes & rooms | **Houses → rooms → devices**: several houses with a switcher in the sidebar; add, rename and delete houses (the last one always stays) and their rooms; tick devices into a room and switch / dim a whole room. SmartThings locations and Tuya homes become houses automatically; names you set here are kept across syncs. Cloud devices stay in their cloud's house; a Matter bulb moves only after you confirm you moved it in SMART+ |
 | Groups | **Groups**: user-defined groups controlled together (power, brightness, colour, scenes) |
 | Scenes / tap-to-run | **Scenes**: local scenes captured from current device states, plus cloud scenes (run) and cloud automations (enable/disable) |
 | Timers / schedules | **Schedules**: daily / weekday timers for a device, group or scene, optional brightness; the app stays in the tray while schedules are enabled |
@@ -158,8 +159,6 @@ Every section on the **Settings** page (Appearance and Credits aside):
   6666/6667/7000) and fills in IP addresses and protocol versions of known devices; allow the app through the
   Windows firewall when asked. **Import tinytuya devices.json…** loads devices from a tinytuya export. Results
   appear in a table (device id, IP, version, product key).
-- **Rooms** — the rooms that group the Devices page: imported from SmartThings / Tuya syncs, plus your own; add,
-  rename or delete them. Names and rooms you set in this app are kept across later syncs.
 - **Devices** — edit names, rooms and connection details for every known device: IP address, protocol version,
   local key, and **LAN first** (use the local network when an IP and key are known). **Cloud** shows whether the
   device came from a cloud sync. **Apply changes** saves; **Remove selected** deletes a device.
@@ -176,6 +175,9 @@ dotnet run --project src/LedvanceControl.App
 
 Run `dotnet test` for the protocol tests (a simulated 3.3/3.4/3.5 device lives in
 `tests/LedvanceControl.Tests/FakeTuyaDevice.cs`).
+
+What we learned about the LEDVANCE SMART+ app, Matter bulbs, SmartThings and Tuya (and the Windows networking
+pitfalls of Matter) is collected in [`docs/INTEGRATION-NOTES.md`](docs/INTEGRATION-NOTES.md).
 
 The Matter bridge (`src/LedvanceControl.MatterBridge`) is a Node.js script bundled with esbuild into a single
 `matter-bridge/bridge.mjs` next to the exe. The App build does this automatically (`npm ci` + `npm run build`)

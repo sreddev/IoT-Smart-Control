@@ -28,7 +28,8 @@ public static class HelpTopics
                 "For lights, use the panel tabs: White (brightness + colour temperature), Colour (hue / saturation / brightness plus quick colours) and Scenes (the 8 built-in Tuya light effects).",
                 "For energy-monitoring plugs, an Energy monitor panel shows live power draw (W), voltage (V), current (A) and total energy (kWh). It appears only when the device actually reports metering.",
                 "Refresh re-reads the current state. Diagnostics runs connectivity checks and reports exactly how the device is reached.",
-                "Edit renames the device or moves it to another room: pick a room from the list or type a new one (leave it empty for 'No room'), then Save or press Enter. Your name and room are kept even when SmartThings / Tuya / Matter devices are synchronised again.",
+                "Edit renames the device or moves it to another room of its house: pick a room or type a new one (leave it empty for 'No room'), then Save or press Enter. Your name and room are kept even when SmartThings / Tuya / Matter devices are synchronised again. The same card shows the device's house and, where allowed, moves it to another house.",
+                "The House picker in the sidebar chooses which house the Devices, Rooms and Groups pages show; 'All off' switches off the selected house.",
                 "The Data points card lists every raw function the device exposes; read-only values such as voltage are shown on the right.",
             ],
             Tip = "Control prefers your local network (LAN) whenever an IP address and 16-character local key are known, and falls back to the cloud otherwise.",
@@ -86,25 +87,26 @@ public static class HelpTopics
                 "Matter over Wi-Fi — pair Matter bulbs straight to this PC and control them over the LAN, with no hub.",
                 "SmartThings — connect bulbs that are brand-locked to LEDVANCE but visible in Samsung SmartThings.",
                 "Local network — discover device IP addresses for LAN control, or import a tinytuya devices.json.",
-                "Devices — edit names, rooms and connection details for each known device.",
+                "Devices — edit names, rooms and connection details for each known device (rooms themselves are managed on the Rooms page).",
                 "Add a device manually — enter a device's id, key, IP and type by hand.",
             ],
             Tip = "You usually need only one connection route per device: Tuya or Matter for local control, or SmartThings for brand-locked bulbs.",
         },
 
-        ["Settings.Rooms"] = new()
+        ["Rooms"] = new()
         {
-            Title = "Rooms",
-            Intro = "Rooms group the device list on the Devices page.",
+            Title = "Houses and rooms",
+            Intro = "Your houses and their rooms, like the home screen of the LEDVANCE SMART+ app. Every device belongs to one house and one of its rooms. Pick the house in the sidebar; Devices, Rooms and Groups then show that house.",
             Steps =
             [
-                "Rooms are imported automatically when you synchronise SmartThings or the Tuya cloud, and stay in the list even when empty.",
-                "Add room — type a name and click 'Add room'.",
-                "Rename selected — pick a room, type the new name, click 'Rename selected'. Its devices move along.",
-                "Delete selected — removes the room; its devices go to 'No room'.",
-                "To put a device in a room, open it on the Devices page and click Edit (or edit the Room column in the Devices table above and click Apply changes).",
+                "House — rename the selected house in the box at the top (saved when you leave it). '+ New house' creates one and switches to it; 'Delete house' removes an empty house. Your only house can't be deleted, and a house that still has devices can't be deleted either.",
+                "Houses linked to a SmartThings location or a Tuya home are created and named by the sync; their devices always live there. Your own name for such a house is kept across syncs.",
+                "+ New room adds a room to the selected house; type its name in the Name box on the right. Delete room moves its devices to 'No room'. Two houses can each have a room with the same name.",
+                "Tick devices under 'Devices in this room' to move them here. A device is in one room at a time, so ticking it moves it from its current room (shown in brackets).",
+                "All on / All off and the light panel control every device in the room at once.",
+                "Moving a device to another house: open it on the Devices page and click Edit. SmartThings and Tuya devices follow their cloud home — move them in that app, then sync. A Matter bulb can move once you confirm you already moved it in the SMART+ app. Manually added devices move freely.",
             ],
-            Tip = "Matter bulbs don't carry the name or room you gave them in their phone app (the LEDVANCE SMART+ app keeps those in its own cloud), so name them and assign rooms here once.",
+            Tip = "The SMART+ app keeps house, room and device names in LEDVANCE's own cloud, which has no public API, and Matter bulbs don't store them — so set them here once. New devices (Matter pairing, manual add) join the house selected in the sidebar.",
         },
 
         ["Settings.Matter"] = new()
@@ -117,7 +119,7 @@ public static class HelpTopics
                 "Make sure the bulb is set up and working on your Wi-Fi in its current app, and that this PC is on the same network.",
                 "In the bulb's current app, open its Matter settings and choose to share / link it with another Matter app or controller. On Android this is also under Settings → Google → Devices & sharing → Matter devices → (bulb) → Linked apps → Link apps. A pairing code is shown and the bulb opens a pairing window for a few minutes.",
                 "Optional: click 'Find devices in pairing mode' — the bulb should be listed, and its IP is filled in for you.",
-                "Type the pairing code (11 or 21 digits, spaces/dashes are fine) and click 'Pair Matter device'. Pairing takes 10-60 seconds.",
+                "Type the pairing code (11 or 21 digits, spaces/dashes are fine) and click 'Pair Matter device'. Pairing takes 10-60 seconds. The bulb is added to the house selected in the sidebar.",
                 "The bulb appears on the Devices page with status 'Online · Matter (LAN)'. Power, brightness, colour and white temperature work, and so do groups, scenes and schedules.",
                 "Factory-new bulb instead? Pair it to a phone app first (Matter set-up needs Bluetooth + Wi-Fi provisioning), then share it to this PC as above.",
             ],

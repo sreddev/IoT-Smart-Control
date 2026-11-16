@@ -113,9 +113,23 @@
                         <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False"
                                           Content="{TemplateBinding SelectionBoxItem}"
                                           ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                          ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
                                           Margin="{TemplateBinding Padding}" VerticalAlignment="Center" HorizontalAlignment="Left"
                                           TextElement.Foreground="{DynamicResource TextMain}" />
-                        <TextBox x:Name="PART_EditableTextBox" Visibility="Hidden" IsReadOnly="True" />
+                        <!-- Used only when IsEditable: WPF shows the text/selection of an editable ComboBox here,
+                             not in ContentSite (SelectionBoxItem stays empty in editable mode). -->
+                        <TextBox x:Name="PART_EditableTextBox" Visibility="Hidden" IsReadOnly="True"
+                                 Background="Transparent" BorderThickness="0" Margin="1,1,26,1" Padding="7,0,0,0"
+                                 VerticalContentAlignment="Center" Foreground="{TemplateBinding Foreground}"
+                                 CaretBrush="{DynamicResource TextMain}" Focusable="True">
+                            <TextBox.Template>
+                                <ControlTemplate TargetType="TextBox">
+                                    <ScrollViewer x:Name="PART_ContentHost" Focusable="False" VerticalAlignment="Center"
+                                                  HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
+                                </ControlTemplate>
+                            </TextBox.Template>
+                        </TextBox>
                         <Popup x:Name="PART_Popup" Placement="Bottom" Focusable="False" AllowsTransparency="True"
                                IsOpen="{TemplateBinding IsDropDownOpen}" PopupAnimation="Slide">
                             <Border Background="{DynamicResource InputBg}" BorderBrush="{DynamicResource Border}" BorderThickness="1"
@@ -130,6 +144,12 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                        <Trigger Property="IsEditable" Value="True">
+                            <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="PART_EditableTextBox" Property="IsReadOnly"
+                                    Value="{Binding IsReadOnly, RelativeSource={RelativeSource TemplatedParent}}" />
+                            <Setter TargetName="ContentSite" Property="Visibility" Value="Hidden" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

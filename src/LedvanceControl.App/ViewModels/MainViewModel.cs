@@ -29,8 +29,12 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         DevicesView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(DeviceViewModel.Room)));
         DevicesView.SortDescriptions.Add(new SortDescription(nameof(DeviceViewModel.Room), ListSortDirection.Ascending));
         DevicesView.SortDescriptions.Add(new SortDescription(nameof(DeviceViewModel.Name), ListSortDirection.Ascending));
+        // The Devices page shows the selected house only (Scenes / Schedules still see every device).
+        DevicesView.Filter = o => o is DeviceViewModel d && d.HouseId == Manager.CurrentHouse.Id;
 
+        ReloadHouses();
         RebuildDevices();
+        Rooms = new RoomsViewModel(this);
         Groups = new GroupsViewModel(this);
         Scenes = new ScenesViewModel(this);
         Schedules = new SchedulesViewModel(this);
@@ -40,14 +44,48 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         NavigateCommand = new RelayCommand(p => Page = (string)p!);
         ToggleThemeCommand = new RelayCommand(() => IsDarkTheme = !IsDarkTheme);
         RefreshAllCommand = new AsyncCommand(RefreshAllAsync);
-        AllOffCommand = new AsyncCommand(async () => Status.Errors("All off", await Manager.ForEachAsync(Manager.Devices.Where(d => d.PowerCode != null), d => d.SetPowerAsync(false))));
+        AllOffCommand = new AsyncCommand(async () => Status.Errors($"All off in {HomeName}",
+            await Manager.ForEachAsync(Manager.DevicesInHouse(Manager.CurrentHouse.Id).Where(d => d.PowerCode != null), d => d.SetPowerAsync(false))));
     }
+
+    /// <summary>Houses for the sidebar switcher.</summary>
+    public ObservableCollection<HouseConfig> Houses { get; } = [];
+
+    /// <summary>The selected house; switching it re-scopes the Devices, Rooms and Groups pages.</summary>
+    public string CurrentHouseId
+    {
+        get => Manager.CurrentHouse.Id;
+        set
+        {
+            if (value == null || value == Manager.CurrentHouse.Id) return;
+            Manager.SetCurrentHouse(value); // ListChanged → OnListChanged re-scopes the pages
+        }
+    }
+
+    private void ReloadHouses()
+    {
+        var names = Manager.Houses.Select(h => (h.Id, h.Name)).ToList();
+        if (!names.SequenceEqual(Houses.Select(h => (h.Id, h.Name))))
+        {
+            Houses.Clear();
+            foreach (var h in Manager.Houses) Houses.Add(h);
+        }
+        OnPropertyChanged(nameof(CurrentHouseId));
+        OnPropertyChanged(nameof(HomeName));
+        OnPropertyChanged(nameof(HasSeveralHouses));
+    }
+
+    public bool HasSeveralHouses => Manager.Houses.Count > 1;
 
     public DeviceManager Manager { get; }
     public Scheduler Scheduler { get; }
     public ObservableCollection<DeviceViewModel> Devices { get; } = [];
     public ICollectionView DevicesView { get; }
+    public RoomsViewModel Rooms { get; }
     public GroupsViewModel Groups { get; }
+
+    /// <summary>Name of the selected house (as the SMART+ app shows it on top); managed on the Rooms page.</summary>
+    public string HomeName => Manager.CurrentHouse.Name;
     public ScenesViewModel Scenes { get; }
     public SchedulesViewModel Schedules { get; }
     public SettingsViewModel Settings { get; }
@@ -101,7 +139,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    public bool HasNoDevices => Devices.Count == 0;
+    public bool HasNoDevices => !Devices.Any(d => d.HouseId == Manager.CurrentHouse.Id);
 
     public string Page
     {
@@ -113,6 +151,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             if (value == "Scenes") Scenes.Reload();
             if (value == "Schedules") Schedules.Reload();
             if (value == "Groups") Groups.Reload();
+            if (value == "Rooms") Rooms.Reload();
             if (value == "Settings") Settings.ReloadDevices();
         }
     }
@@ -136,7 +175,10 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
 
     private void OnListChanged()
     {
+        ReloadHouses();
         RebuildDevices();
+        Rooms.Reload();
+        Groups.Reload();
         Scenes.Reload();
         Schedules.Reload();
     }
@@ -153,7 +195,10 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             if (ReferenceEquals(vm, old)) vm.RebuildDps();
             Devices.Add(vm);
         }
-        SelectedDevice = Devices.FirstOrDefault(d => d.Id == selectedId) ?? Devices.FirstOrDefault();
+        var house = Manager.CurrentHouse.Id;
+        DevicesView.Refresh();
+        SelectedDevice = Devices.FirstOrDefault(d => d.Id == selectedId && d.HouseId == house)
+                         ?? DevicesView.Cast<DeviceViewModel>().FirstOrDefault();
         OnPropertyChanged(nameof(HasNoDevices));
     }
 

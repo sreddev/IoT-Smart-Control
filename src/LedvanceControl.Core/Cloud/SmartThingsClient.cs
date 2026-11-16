@@ -169,6 +169,20 @@ public sealed class SmartThingsClient : IDisposable
     public Task SendCommandsAsync(string deviceId, JsonArray commands, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Post, $"/devices/{deviceId}/commands", new JsonObject { ["commands"] = commands }, ct);
 
+    /// <summary>The location's name (SmartThings' equivalent of a "home"), or null when it can't be read.</summary>
+    public async Task<string?> GetLocationNameAsync(string locationId, CancellationToken ct = default)
+    {
+        try
+        {
+            var result = await SendAsync(HttpMethod.Get, $"/locations/{locationId}", null, ct);
+            return result["name"]?.GetValue<string>();
+        }
+        catch (SmartThingsException)
+        {
+            return null;
+        }
+    }
+
     public async Task<List<StRoom>> GetRoomsAsync(string locationId, CancellationToken ct = default)
     {
         try

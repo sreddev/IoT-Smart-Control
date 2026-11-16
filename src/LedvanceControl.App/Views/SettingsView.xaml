@@ -95,35 +95,6 @@
                 </StackPanel>
             </Border>
 
-            <!-- Rooms -->
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                        <TextBlock Text="Rooms" Style="{StaticResource H2}" Margin="0" VerticalAlignment="Center" />
-                        <views:HelpButton Topic="Settings.Rooms" Margin="8,0,0,0" VerticalAlignment="Center" />
-                    </StackPanel>
-                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10" TextWrapping="Wrap"
-                               Text="Rooms group the Devices page. Rooms from SmartThings and Tuya syncs are added here automatically; you can add your own, rename or delete them. Assign a device to a room with Edit on the Devices page (or the Room column above)." />
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="260" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <ListBox ItemsSource="{Binding Rooms}" SelectedItem="{Binding SelectedRoom}" Height="132" Margin="0,0,12,0"
-                                 BorderBrush="{DynamicResource Border}" BorderThickness="1" />
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Text="Room name (new room, or new name for the selected one)" Style="{StaticResource Label}" />
-                            <TextBox Text="{Binding RoomName, UpdateSourceTrigger=PropertyChanged}" MaxWidth="360" HorizontalAlignment="Left" MinWidth="260" />
-                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                                <Button Content="Add room" Style="{StaticResource AccentButton}" Command="{Binding AddRoomCommand}" />
-                                <Button Content="Rename selected" Command="{Binding RenameRoomCommand}" />
-                                <Button Content="Delete selected" Command="{Binding DeleteRoomCommand}" />
-                            </StackPanel>
-                        </StackPanel>
-                    </Grid>
-                </StackPanel>
-            </Border>
-
             <!-- Matter -->
             <Border Style="{StaticResource Card}">
                 <StackPanel>
