@@ -30,8 +30,10 @@
   item with assistive technology now opens its page.
 
 ### Packaging
-- `packaging/build-release.ps1` builds and checks the whole release (tests, installer, signed MSIX, SHA-256
-  checksums). The repository now includes the MIT `LICENSE`.
+- `packaging/build-release.ps1` builds and checks the whole release (tests, installer, signed MSIX, Store
+  upload, SHA-256 checksums). The repository now includes the MIT `LICENSE`.
+- **First Microsoft Store package: 1.0.0.0.** The Store numbers its packages independently of the app;
+  this Store 1.0.0.0 is app version 2.5.0.
 
 ## 2.0.0
 - Houses → rooms → devices with a house picker, Rooms page, auto-refresh with per-device spinners, Matter over

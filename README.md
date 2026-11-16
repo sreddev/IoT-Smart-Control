@@ -250,7 +250,7 @@ pwsh packaging/build-release.ps1   # → packaging/out: Setup .exe, signed .msix
 ```
 
 `build-msix.ps1` on its own builds the Store package (`pwsh packaging/build-msix.ps1` = unsigned, for Partner
-Center). See [`packaging/README.md`](packaging/README.md) for the installer options, the MSIX manifest and the
+Center). The Store numbers its packages independently: Store 1.0.0.0 is app version 2.5.0. See [`packaging/README.md`](packaging/README.md) for the installer options, the MSIX manifest and the
 Store requirements.
 
 Configuration is stored in `%APPDATA%\IoTSmartControl\config.json` (Linux: `~/.config/IoTSmartControl/`; a

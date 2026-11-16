@@ -7,11 +7,13 @@
   2. Publishes the app self-contained for win-x64 (no .NET install needed on the target).
   3. Bundles Node.js (node.exe + its LICENSE) as matter-bridge\node so Matter works out of the box.
   4. Compiles the Inno Setup installer  ->  out\IoTSmartControl-<ver>-Setup-x64.exe
-  5. Packs + signs the MSIX              ->  out\IoTSmartControl_<ver>.0_x64.msix (+ .cer)
-  6. Writes SHA256SUMS.txt for everything in the release.
+  5. Packs + signs the sideload MSIX     ->  out\IoTSmartControl_<ver>.0_x64.msix (+ .cer)
+  6. Packs the Microsoft Store upload     ->  out\IoTSmartControl_<store ver>_x64_store-upload.msix (unsigned)
+  7. Writes SHA256SUMS-<ver>.txt for the GitHub release files (1, 5).
 
-  The version comes from src\LedvanceControl.App\LedvanceControl.App.csproj (<Version>), which must
-  match packaging\AppxManifest.xml (checked).
+  The app version comes from src\LedvanceControl.App\LedvanceControl.App.csproj (<Version>). The Store
+  numbers its packages on its own: packaging\AppxManifest.xml holds the Store version (1.0.0.0 was the
+  first Store release) and is only used for the Store upload.
 
 .PARAMETER NodeExe    node.exe to bundle (default: the one on PATH).
 .PARAMETER NodeLicense Node.js LICENSE file for that version (default: packaging\obj\node\LICENSE).
@@ -37,13 +39,10 @@ $publish = Join-Path $pkgDir 'obj/publish'
 $nodeDir = Join-Path $pkgDir 'obj/node-bundle'
 $outDir  = Join-Path $pkgDir 'out'
 
-# ---- version: one source of truth, cross-checked with the MSIX manifest
+# ---- versions: the app's (csproj) and the Store package's (AppxManifest)
 $version = ([xml](Get-Content $proj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
-[xml]$manifest = Get-Content (Join-Path $pkgDir 'AppxManifest.xml')
-if ($manifest.Package.Identity.Version -ne "$version.0") {
-    throw "Version mismatch: csproj $version vs AppxManifest $($manifest.Package.Identity.Version) (expected $version.0)."
-}
-Write-Host "==> IoT Smart Control $version" -ForegroundColor Cyan
+$storeVersion = ([xml](Get-Content (Join-Path $pkgDir 'AppxManifest.xml'))).Package.Identity.Version
+Write-Host "==> IoT Smart Control $version (Microsoft Store package $storeVersion)" -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
 if (-not $SkipTests) {
@@ -83,10 +82,13 @@ Write-Host "    $setup" -ForegroundColor Green
 # ---- MSIX
 $files = @($setup)
 if (-not $NoMsix) {
-    Write-Host '==> Building the MSIX…' -ForegroundColor Cyan
-    & (Join-Path $pkgDir 'build-msix.ps1') -Sign -NodeDir $nodeDir
+    Write-Host '==> Building the sideload MSIX…' -ForegroundColor Cyan
+    & (Join-Path $pkgDir 'build-msix.ps1') -Sign -NodeDir $nodeDir -Version "$version.0"
     $files += Join-Path $outDir "IoTSmartControl_$version.0_x64.msix"
     $files += Join-Path $outDir 'IoTSmartControl-Test.cer'
+    Write-Host '==> Building the Microsoft Store upload…' -ForegroundColor Cyan
+    & (Join-Path $pkgDir 'build-msix.ps1') -NodeDir $nodeDir
+    $store = Join-Path $outDir "IoTSmartControl_${storeVersion}_x64_store-upload.msix"
 }
 
 # ---- checksums
@@ -94,4 +96,4 @@ $sums = Join-Path $outDir "SHA256SUMS-$version.txt"
 $files | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant(), (Split-Path $_ -Leaf) } |
     Set-Content -Path $sums -Encoding ascii
 Write-Host "==> Done. Release files:" -ForegroundColor Green
-($files + $sums) | ForEach-Object { '    {0,-48} {1,8:N1} MB' -f (Split-Path $_ -Leaf), ((Get-Item $_).Length / 1MB) }
+($files + $sums + @($store | Where-Object { $_ })) | ForEach-Object { '    {0,-48} {1,8:N1} MB' -f (Split-Path $_ -Leaf), ((Get-Item $_).Length / 1MB) }
