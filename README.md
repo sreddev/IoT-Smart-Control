@@ -293,11 +293,20 @@ docs/                        ARCHITECTURE.md, INTEGRATION-NOTES.md, screenshots
 
 ## Credits
 
-Made with ♥ by Sergio — GitHub [@sreddev](https://github.com/sreddev) · Telegram [@sreddev](https://t.me/sreddev).
+Made with ♥ by **Sergio**
 
-LEDVANCE, Tuya and SmartThings are trademarks of their respective owners. This project is not affiliated with them.
+| | |
+|---|---|
+| GitHub | [@sreddev](https://github.com/sreddev) |
+| Telegram | [@sreddev](https://t.me/sreddev) |
+| Donate | [![Donate with PayPal](https://img.shields.io/badge/Donate-PayPal-0070BA?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.com/donate/?business=M3KKGFD9NCZH8&no_recurring=0&item_name=Thanks+for+using+my+free+tools+and+apps!+Every+coffee+helps+landing+new+features.&currency_code=EUR) [![Donate with Revolut](https://img.shields.io/badge/Donate-Revolut-191C1F?style=for-the-badge&logo=revolut&logoColor=white)](https://revolut.me/sreddev) |
+
+Denon, Marantz, HEOS and Audyssey are trademarks of their respective owners. This project is not affiliated with them.
 
 ## License
+
+[MIT](LICENSE)
+
 
 [MIT](LICENSE). The installers bundle Node.js, distributed under its own license
 (`matter-bridge\node\LICENSE` in the install folder).
